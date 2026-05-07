@@ -122,7 +122,7 @@ export default function BackupPage() {
         <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}>
           <ArrowLeft size={22} />
         </button>
-        <img src="/logo-light-text.jpg" alt="Easy Record" className="sidebar-brand-logo" style={{ height: '32px' }} />
+        <img src="/logo-dark-text.png" alt="Easy Record" className="sidebar-brand-logo" style={{ height: '32px' }} />
         <div>
           <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Backup &amp; Restore</h1>
           <p style={{ margin: 0, fontSize: '13px', opacity: 0.7 }}>Easy Record</p>
