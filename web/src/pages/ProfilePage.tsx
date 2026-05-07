@@ -14,7 +14,7 @@ export default function ProfilePage() {
           </div>
           <div>
             <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: 'var(--fg)' }}>{user?.name || 'Admin User'}</h2>
-            <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '15px' }}>{user?.phone || 'No phone number provided'}</p>
+            <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '15px' }}>{user?.email || 'No email provided'}</p>
           </div>
         </div>
         
@@ -30,9 +30,9 @@ export default function ProfilePage() {
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', alignItems: 'center' }}>
-              <div style={{ color: 'var(--muted)', fontWeight: 500 }}>Phone Number</div>
+              <div style={{ color: 'var(--muted)', fontWeight: 500 }}>Email Address</div>
               <div style={{ padding: '10px 14px', background: 'var(--bg)', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                {user?.phone || 'N/A'}
+                {user?.email || 'N/A'}
               </div>
             </div>
             
