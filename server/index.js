@@ -115,11 +115,17 @@ app.post('/api/businesses', authenticateToken, async (req, res) => {
 // ── FOLDERS ──
 app.get('/api/folders', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const { rows } = await pool.query('SELECT id, business_id AS "businessId", name, created_at AS "createdAt" FROM folders WHERE business_id=$1', [businessId]);
   res.json(rows);
 });
 app.post('/api/folders', authenticateToken, async (req, res) => {
   const { businessId, name } = req.body;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const id = genId();
   await pool.query('INSERT INTO folders(id,business_id,name) VALUES($1,$2,$3)', [id, businessId, name]);
   await logAction(pool, businessId, 'Create File', `Created file: ${name}`, { userName: req.user.name });
@@ -140,6 +146,9 @@ app.patch('/api/folders/:id', authenticateToken, async (req, res) => {
 // ── REGISTERS ──
 app.get('/api/registers', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
     category, template, created_at AS "createdAt", updated_at AS "updatedAt", entry_count AS "entryCount",
     last_activity AS "lastActivity", deleted_at AS "deletedAt" FROM registers WHERE business_id=$1 AND deleted_at IS NULL`, [businessId]);
@@ -148,6 +157,9 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
 
 app.get('/api/registers/deleted', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
     category, template, created_at AS "createdAt", updated_at AS "updatedAt", entry_count AS "entryCount",
     last_activity AS "lastActivity", deleted_at AS "deletedAt" FROM registers WHERE business_id=$1 AND deleted_at IS NOT NULL`, [businessId]);
@@ -162,6 +174,8 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
     created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [regId]);
   if (!regRows.length) return res.status(404).json({ error: 'Register not found' });
   const reg = regRows[0];
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [reg.businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
   const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [regId]);
   reg.entries = entryRows;
   if (!reg.pages || reg.pages.length === 0) reg.pages = [{ id: 1, name: 'Page 1', index: 0 }];
@@ -171,6 +185,8 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/registers', authenticateToken, async (req, res) => {
   const { businessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
   const id = genId();
   const cols = (columns || []).map((c, i) => ({ id: id + i + 1, registerId: id, name: c.name, type: c.type, position: i, dropdownOptions: c.dropdownOptions, formula: c.formula, width: c.width, summary: c.summary }));
   const pages = [{ id: 1, name: 'Page 1', index: 0 }];
@@ -376,6 +392,9 @@ app.post('/api/registers/:regId/entries/reorder', authenticateToken, async (req,
 // ── HISTORY ──
 app.get('/api/history', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", action, details, user_name AS "userName", register_name AS "registerName", register_id AS "registerId", timestamp FROM history WHERE business_id=$1 ORDER BY timestamp DESC LIMIT 200`, [businessId]);
   res.json(rows);
 });
@@ -384,6 +403,9 @@ app.get('/api/history', authenticateToken, async (req, res) => {
 app.get('/api/search', authenticateToken, async (req, res) => {
   const { businessId, q } = req.query;
   if (!q) return res.json([]);
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const term = `%${q}%`;
   // Search register names
   const { rows: regMatches } = await pool.query(`SELECT id AS "registerId", name AS "registerName", folder_id AS "folderId" FROM registers WHERE business_id=$1 AND deleted_at IS NULL AND name ILIKE $2 LIMIT 20`, [businessId, term]);
@@ -405,12 +427,18 @@ app.get('/api/search', authenticateToken, async (req, res) => {
 // ── BACKUPS ──
 app.get('/api/backups', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", created_at AS "createdAt", label, register_count AS "registerCount", folder_count AS "folderCount", total_entries AS "totalEntries", size_kb AS "sizeKb" FROM backups WHERE business_id=$1 ORDER BY created_at DESC`, [businessId]);
   res.json(rows);
 });
 
 app.post('/api/backups', authenticateToken, async (req, res) => {
   const { businessId, label } = req.body;
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+
   const id = `backup_${Date.now()}`;
   // Gather all data
   const { rows: regs } = await pool.query('SELECT * FROM registers WHERE business_id=$1', [businessId]);
