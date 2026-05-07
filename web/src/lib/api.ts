@@ -1972,4 +1972,11 @@ export async function isBackupDue(businessId: number): Promise<boolean> {
   return lastBackup < threeDaysAgo;
 }
 
-
+/**
+ * Clear all in-memory caches. Must be called on logout to prevent
+ * data from one user leaking into another user's session.
+ */
+export function clearAllCaches(): void {
+  registerCache.clear();
+  registerMutationQueues.clear();
+}

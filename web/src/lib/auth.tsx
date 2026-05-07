@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import { getMe, type User } from './api';
+import { useQueryClient } from '@tanstack/react-query';
+import { getMe, clearAllCaches, type User } from './api';
 
 const TOKEN_KEY = 'recordbook_token';
 
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return saved ? { id: 1, email: '', name: 'Loading...', createdAt: '' } : null;
   });
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     async function loadUser() {
@@ -45,16 +47,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   const login = useCallback((newToken: string, newUser: User) => {
+    // Clear all caches from the previous session before setting the new user
+    queryClient.clear();
+    clearAllCaches();
     localStorage.setItem(TOKEN_KEY, newToken);
     setToken(newToken);
     setUser(newUser);
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
-  }, []);
+    // Clear all cached data so the next user starts fresh
+    queryClient.clear();
+    clearAllCaches();
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
