@@ -18,21 +18,28 @@ async function fetchApi(input: string, init?: RequestInit) {
 // ==================== AUTH ====================
 export interface User {
   id: number;
-  phone: string;
+  email: string;
   name: string | null;
   createdAt: string;
 }
 
-export interface SendOtpResponse { message: string; devOtp?: string; }
-export interface VerifyOtpResponse { token: string; user: User; }
+export interface AuthResponse { token: string; user: User; }
 
-export async function sendOtp(phone: string): Promise<SendOtpResponse> {
-  const res = await fetchApi(`${API}/auth/send-otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetchApi(`${API}/auth/login`, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' }, 
+    body: JSON.stringify({ email, password }) 
+  });
   return res.json();
 }
 
-export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpResponse> {
-  const res = await fetchApi(`${API}/auth/verify-otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, otp }) });
+export async function signup(name: string, email: string, password: string): Promise<AuthResponse> {
+  const res = await fetchApi(`${API}/auth/signup`, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' }, 
+    body: JSON.stringify({ name, email, password }) 
+  });
   return res.json();
 }
 

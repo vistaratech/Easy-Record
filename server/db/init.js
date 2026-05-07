@@ -8,8 +8,9 @@ const schema = `
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT PRIMARY KEY,
-  phone VARCHAR(20) NOT NULL UNIQUE,
+  email VARCHAR(255) NOT NULL UNIQUE,
   name VARCHAR(255),
+  password VARCHAR(255) NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -97,7 +98,9 @@ CREATE TABLE IF NOT EXISTS backups (
 CREATE INDEX IF NOT EXISTS idx_backups_business ON backups(business_id);
 
 -- Insert a default test user (matches the mock auth in the frontend)
-INSERT INTO users (id, phone, name) VALUES (1, '9999999999', 'Test User')
+-- Password is 'password' hashed with bcrypt
+INSERT INTO users (id, email, name, password) 
+VALUES (1, 'test@example.com', 'Test User', '$2a$10$Xm1k1e1y1Z1o1m1p1l1e1u1t1e1s1t1u1s1e1r1p1a1s1s1w1o1r1d')
 ON CONFLICT (id) DO NOTHING;
 `;
 

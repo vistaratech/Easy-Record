@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import pool from './db/pool.js';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -16,41 +17,59 @@ function genId() {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'easy-record-super-secret-jwt-key';
-const OTP_STORE = {}; // In-memory OTP store for dev
 
 // ── AUTH ──
-app.post('/api/auth/send-otp', (req, res) => {
-  const { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: 'Phone is required' });
-  
-  const otp = '123456'; // In a real app, generate a random 6 digit code
-  OTP_STORE[phone] = otp;
-  res.json({ message: 'OTP sent', devOtp: otp });
-});
-
-app.post('/api/auth/verify-otp', async (req, res) => {
-  const { phone, otp } = req.body;
-  if (OTP_STORE[phone] !== otp) {
-    return res.status(401).json({ error: 'Invalid OTP' });
+app.post('/api/auth/signup', async (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required' });
   }
-  delete OTP_STORE[phone];
 
   try {
-    let { rows } = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
-    let user;
-    if (rows.length === 0) {
-      const id = genId();
-      await pool.query('INSERT INTO users(id, phone, name) VALUES($1, $2, $3)', [id, phone, 'New User']);
-      const { rows: newRows } = await pool.query('SELECT * FROM users WHERE id=$1', [id]);
-      user = newRows[0];
-    } else {
-      user = rows[0];
+    const { rows: existing } = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Email already exists' });
     }
 
-    const token = jwt.sign({ id: user.id, phone: user.phone }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id: user.id, phone: user.phone, name: user.name, createdAt: user.created_at } });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const id = genId();
+    await pool.query('INSERT INTO users(id, email, name, password) VALUES($1, $2, $3, $4)', [id, email, name, hashedPassword]);
+    
+    // Create a default business for the new user
+    const businessId = genId();
+    await pool.query('INSERT INTO businesses(id, name, owner_id) VALUES($1, $2, $3)', [businessId, 'My Business', id]);
+    await logAction(pool, businessId, 'Create Business', 'Initial default business created', { userName: name });
+
+    const token = jwt.sign({ id, email, name }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user: { id, email, name, createdAt: new Date().toISOString() } });
   } catch (err) {
-    console.error('Verify OTP error:', err);
+    console.error('Signup error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    const user = rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, createdAt: user.created_at } });
+  } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -74,7 +93,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = rows[0];
-    res.json({ id: user.id, phone: user.phone, name: user.name, createdAt: user.created_at });
+    res.json({ id: user.id, email: user.email, name: user.name, createdAt: user.created_at });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -89,37 +108,37 @@ app.post('/api/businesses', authenticateToken, async (req, res) => {
   const id = genId();
   const { name } = req.body;
   await pool.query('INSERT INTO businesses(id,name,owner_id) VALUES($1,$2,$3)', [id, name, req.user.id]);
-  await logAction(pool, id, 'Create Business', `Created business: ${name}`);
+  await logAction(pool, id, 'Create Business', `Created business: ${name}`, { userName: req.user.name });
   res.json({ id, name, ownerId: req.user.id, createdAt: new Date().toISOString() });
 });
 
 // ── FOLDERS ──
-app.get('/api/folders', async (req, res) => {
+app.get('/api/folders', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
   const { rows } = await pool.query('SELECT id, business_id AS "businessId", name, created_at AS "createdAt" FROM folders WHERE business_id=$1', [businessId]);
   res.json(rows);
 });
-app.post('/api/folders', async (req, res) => {
+app.post('/api/folders', authenticateToken, async (req, res) => {
   const { businessId, name } = req.body;
   const id = genId();
   await pool.query('INSERT INTO folders(id,business_id,name) VALUES($1,$2,$3)', [id, businessId, name]);
-  await logAction(pool, businessId, 'Create File', `Created file: ${name}`);
+  await logAction(pool, businessId, 'Create File', `Created file: ${name}`, { userName: req.user.name });
   res.json({ id, businessId, name, createdAt: new Date().toISOString() });
 });
-app.delete('/api/folders/:id', async (req, res) => {
+app.delete('/api/folders/:id', authenticateToken, async (req, res) => {
   const id = req.params.id;
   await pool.query('UPDATE registers SET folder_id=NULL WHERE folder_id=$1', [id]);
   await pool.query('DELETE FROM folders WHERE id=$1', [id]);
   res.json({ ok: true });
 });
-app.patch('/api/folders/:id', async (req, res) => {
+app.patch('/api/folders/:id', authenticateToken, async (req, res) => {
   const { name } = req.body;
   const { rows } = await pool.query('UPDATE folders SET name=$1 WHERE id=$2 RETURNING id, business_id AS "businessId", name, created_at AS "createdAt"', [name, req.params.id]);
   res.json(rows[0]);
 });
 
 // ── REGISTERS ──
-app.get('/api/registers', async (req, res) => {
+app.get('/api/registers', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
     category, template, created_at AS "createdAt", updated_at AS "updatedAt", entry_count AS "entryCount",
@@ -127,7 +146,7 @@ app.get('/api/registers', async (req, res) => {
   res.json(rows);
 });
 
-app.get('/api/registers/deleted', async (req, res) => {
+app.get('/api/registers/deleted', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
     category, template, created_at AS "createdAt", updated_at AS "updatedAt", entry_count AS "entryCount",
@@ -135,7 +154,7 @@ app.get('/api/registers/deleted', async (req, res) => {
   res.json(rows);
 });
 
-app.get('/api/registers/:id', async (req, res) => {
+app.get('/api/registers/:id', authenticateToken, async (req, res) => {
   const regId = req.params.id;
   const { rows: regRows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
     category, template, columns, pages, share_link AS "shareLink", shared_with AS "sharedWith", deleted_items AS "deletedItems",
@@ -150,7 +169,7 @@ app.get('/api/registers/:id', async (req, res) => {
   res.json(reg);
 });
 
-app.post('/api/registers', async (req, res) => {
+app.post('/api/registers', authenticateToken, async (req, res) => {
   const { businessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
   const id = genId();
   const cols = (columns || []).map((c, i) => ({ id: id + i + 1, registerId: id, name: c.name, type: c.type, position: i, dropdownOptions: c.dropdownOptions, formula: c.formula, width: c.width, summary: c.summary }));
@@ -171,27 +190,27 @@ app.post('/api/registers', async (req, res) => {
     }
     await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,page_index) VALUES ${values.join(',')}`, params);
   }
-  await logAction(pool, businessId, 'Create Register', `Created register: ${name}`, { registerId: id, registerName: name });
+  await logAction(pool, businessId, 'Create Register', `Created register: ${name}`, { registerId: id, registerName: name, userName: req.user.name });
   res.json({ id, businessId, folderId, name, icon: icon || 'file-text', iconColor, category: category || 'general', template: template || name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: cols.length > 0 ? 10 : 0 });
 });
 
-app.delete('/api/registers/:id', async (req, res) => {
+app.delete('/api/registers/:id', authenticateToken, async (req, res) => {
   await pool.query('UPDATE registers SET deleted_at=NOW() WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
 
-app.delete('/api/registers/:id/permanent', async (req, res) => {
+app.delete('/api/registers/:id/permanent', authenticateToken, async (req, res) => {
   await pool.query('DELETE FROM entries WHERE register_id=$1', [req.params.id]);
   await pool.query('DELETE FROM registers WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
 
-app.post('/api/registers/:id/restore', async (req, res) => {
+app.post('/api/registers/:id/restore', authenticateToken, async (req, res) => {
   await pool.query('UPDATE registers SET deleted_at=NULL WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
 
-app.put('/api/registers/:id', async (req, res) => {
+app.put('/api/registers/:id', authenticateToken, async (req, res) => {
   const id = req.params.id;
   const reg = req.body;
   
@@ -240,7 +259,7 @@ app.put('/api/registers/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.patch('/api/registers/:id', async (req, res) => {
+app.patch('/api/registers/:id', authenticateToken, async (req, res) => {
   const updates = req.body;
   const sets = [];
   const params = [];
@@ -264,7 +283,7 @@ app.patch('/api/registers/:id', async (req, res) => {
   res.json(reg);
 });
 
-app.post('/api/registers/:id/duplicate', async (req, res) => {
+app.post('/api/registers/:id/duplicate', authenticateToken, async (req, res) => {
   const origId = req.params.id;
   const { rows: regRows } = await pool.query('SELECT * FROM registers WHERE id=$1', [origId]);
   if (!regRows.length) return res.status(404).json({ error: 'Not found' });
@@ -284,7 +303,7 @@ app.post('/api/registers/:id/duplicate', async (req, res) => {
 });
 
 // ── ENTRIES ──
-app.post('/api/registers/:regId/entries', async (req, res) => {
+app.post('/api/registers/:regId/entries', authenticateToken, async (req, res) => {
   const regId = req.params.regId;
   const { cells, pageIndex, atIndex } = req.body;
   const id = genId();
@@ -296,7 +315,7 @@ app.post('/api/registers/:regId/entries', async (req, res) => {
   res.json({ id, registerId: Number(regId), rowNumber, cells: cells || {}, createdAt: new Date().toISOString(), pageIndex: pageIndex || 0 });
 });
 
-app.patch('/api/entries/:id', async (req, res) => {
+app.patch('/api/entries/:id', authenticateToken, async (req, res) => {
   const { cells } = req.body;
   // Merge cells
   const { rows: existing } = await pool.query('SELECT cells FROM entries WHERE id=$1', [req.params.id]);
@@ -307,7 +326,7 @@ app.patch('/api/entries/:id', async (req, res) => {
   res.json({ id: Number(req.params.id), cells: merged });
 });
 
-app.patch('/api/entries/:id/styles', async (req, res) => {
+app.patch('/api/entries/:id/styles', authenticateToken, async (req, res) => {
   const { cellStyles } = req.body;
   const { rows: existing } = await pool.query('SELECT cell_styles FROM entries WHERE id=$1', [req.params.id]);
   if (!existing.length) return res.status(404).json({ error: 'Entry not found' });
@@ -316,7 +335,7 @@ app.patch('/api/entries/:id/styles', async (req, res) => {
   res.json({ id: Number(req.params.id), cellStyles: merged });
 });
 
-app.delete('/api/entries/:id', async (req, res) => {
+app.delete('/api/entries/:id', authenticateToken, async (req, res) => {
   const { rows } = await pool.query('SELECT register_id FROM entries WHERE id=$1', [req.params.id]);
   if (rows.length) {
     await pool.query('DELETE FROM entries WHERE id=$1', [req.params.id]);
@@ -325,7 +344,7 @@ app.delete('/api/entries/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/registers/:regId/entries/bulk-delete', async (req, res) => {
+app.post('/api/registers/:regId/entries/bulk-delete', authenticateToken, async (req, res) => {
   const { entryIds } = req.body;
   if (entryIds?.length) {
     const placeholders = entryIds.map((_, i) => `$${i + 1}`).join(',');
@@ -335,7 +354,7 @@ app.post('/api/registers/:regId/entries/bulk-delete', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/registers/:regId/entries/reorder', async (req, res) => {
+app.post('/api/registers/:regId/entries/reorder', authenticateToken, async (req, res) => {
   const { entries } = req.body;
   const client = await pool.connect();
   try {
@@ -355,14 +374,14 @@ app.post('/api/registers/:regId/entries/reorder', async (req, res) => {
 });
 
 // ── HISTORY ──
-app.get('/api/history', async (req, res) => {
+app.get('/api/history', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", action, details, user_name AS "userName", register_name AS "registerName", register_id AS "registerId", timestamp FROM history WHERE business_id=$1 ORDER BY timestamp DESC LIMIT 200`, [businessId]);
   res.json(rows);
 });
 
 // ── SEARCH ──
-app.get('/api/search', async (req, res) => {
+app.get('/api/search', authenticateToken, async (req, res) => {
   const { businessId, q } = req.query;
   if (!q) return res.json([]);
   const term = `%${q}%`;
@@ -384,13 +403,13 @@ app.get('/api/search', async (req, res) => {
 });
 
 // ── BACKUPS ──
-app.get('/api/backups', async (req, res) => {
+app.get('/api/backups', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
   const { rows } = await pool.query(`SELECT id, business_id AS "businessId", created_at AS "createdAt", label, register_count AS "registerCount", folder_count AS "folderCount", total_entries AS "totalEntries", size_kb AS "sizeKb" FROM backups WHERE business_id=$1 ORDER BY created_at DESC`, [businessId]);
   res.json(rows);
 });
 
-app.post('/api/backups', async (req, res) => {
+app.post('/api/backups', authenticateToken, async (req, res) => {
   const { businessId, label } = req.body;
   const id = `backup_${Date.now()}`;
   // Gather all data
@@ -411,12 +430,12 @@ app.post('/api/backups', async (req, res) => {
   res.json({ id, businessId, createdAt: now.toISOString(), label: backupLabel, registerCount: regs.length, folderCount: folders.length, totalEntries, sizeKb });
 });
 
-app.delete('/api/backups/:id', async (req, res) => {
+app.delete('/api/backups/:id', authenticateToken, async (req, res) => {
   await pool.query('DELETE FROM backups WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
 
-app.post('/api/backups/:id/restore', async (req, res) => {
+app.post('/api/backups/:id/restore', authenticateToken, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM backups WHERE id=$1', [req.params.id]);
   if (!rows.length) return res.status(404).json({ error: 'Backup not found' });
   const backup = rows[0];
@@ -447,7 +466,7 @@ async function logAction(db, businessId, action, details, meta = {}) {
   try {
     const id = genId();
     await db.query('INSERT INTO history(id,business_id,action,details,user_name,register_name,register_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
-      [id, businessId, action, details, 'Test User', meta.registerName || null, meta.registerId || null]);
+      [id, businessId, action, details, meta.userName || 'System', meta.registerName || null, meta.registerId || null]);
   } catch (e) { console.error('Log failed:', e.message); }
 }
 
@@ -465,4 +484,4 @@ if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => console.log(`🚀 Easy Record server running on port ${PORT}`));
 }
 
-module.exports = app;
+export default app;
