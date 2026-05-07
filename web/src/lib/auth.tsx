@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { User } from './api';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { getMe, type User } from './api';
 
 const TOKEN_KEY = 'recordbook_token';
 
@@ -19,9 +19,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem(TOKEN_KEY);
     // If a token exists, hydrate a minimal user so PrivateRoute lets us through
-    return saved ? { id: 1, phone: '', name: 'User', createdAt: '' } : null;
+    return saved ? { id: 1, phone: '', name: 'Loading...', createdAt: '' } : null;
   });
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadUser() {
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const userData = await getMe();
+        setUser(userData);
+      } catch (err) {
+        console.error('Session validation failed:', err);
+        localStorage.removeItem(TOKEN_KEY);
+        setToken(null);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadUser();
+  }, [token]);
 
   const login = useCallback((newToken: string, newUser: User) => {
     localStorage.setItem(TOKEN_KEY, newToken);

@@ -2025,7 +2025,7 @@ export default function RegisterPage() {
     if (detailViewEntryIdRef.current === entryId) {
       setDetailEdits(prev => ({ ...prev, [columnId]: value }));
       if (detailErrorsRef.current[columnId]) setDetailErrors(prev => ({ ...prev, [columnId]: null }));
-      // Return early: do NOT update main state or firestore until "Save Changes" is clicked
+      // Return early: do NOT update main state or database until "Save Changes" is clicked
       return; 
     }
 
@@ -2039,7 +2039,7 @@ export default function RegisterPage() {
       return e;
     }));
 
-    // 2. Debounce the Firestore write — no invalidateQueries, just patch the cache
+    // 2. Debounce the database write — no invalidateQueries, just patch the cache
     const key = `${entryId}-${columnId}`;
     
     // Capture initial value before the first keystroke of this session
@@ -2113,7 +2113,7 @@ export default function RegisterPage() {
       return e;
     }));
 
-    // 2. Persist to Firestore
+    // 2. Persist to database
     updateEntryCellStyles(registerId, entryId, { [colId]: mergedStyle }).then(() => {
       queryClient.setQueryData(['register', registerId], (old: any) => {
         if (!old) return old;
@@ -2160,7 +2160,7 @@ export default function RegisterPage() {
     });
   }, [formatCell, registerId, queryClient]);
 
-  // Excel-like sort: permanently reorders localEntries and persists to Firestore
+  // Excel-like sort: permanently reorders localEntries and persists to database
   const handleSort = useCallback((colId: number, direction: 'asc' | 'desc') => {
     setSortColId(colId);
     setSortDir(direction);
@@ -2190,12 +2190,12 @@ export default function RegisterPage() {
         return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       });
 
-      // Persist sorted order to Firestore
+      // Persist sorted order to database
       queryClient.setQueryData(['register', registerId], (old: any) => {
         if (!old) return old;
         return { ...old, entries: sorted };
       });
-      // Fire Firestore write via the mutation queue
+      // Fire database write via the mutation queue
       updateEntriesOrder(registerId, sorted).catch(err => {
         console.error('Failed to save sorted order:', err);
       });
@@ -3979,7 +3979,7 @@ export default function RegisterPage() {
                       }
                     });
 
-                    // 3. Persist batch to Firestore (non-blocking for UI)
+                    // 3. Persist batch to database (non-blocking for UI)
                     setIsSaving(true);
                     updateEntry(registerId, detailViewEntry.id, changedCells).then(() => {
                       Object.keys(changedCells).forEach(colId => {

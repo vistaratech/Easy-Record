@@ -1,11 +1,20 @@
-// Firestore-backed API client for RecordBook Web
-import { db } from './firebase';
-import {
-  collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, where, orderBy,
-} from 'firebase/firestore';
+// REST API client for Easy Record
 import { TEMPLATES, type Template, type TemplateColumn } from './templates';
-// Local filesystem completely unmounted from regular API.
 
+const API = 'http://localhost:3001/api';
+
+async function fetchApi(input: string, init?: RequestInit) {
+  const token = localStorage.getItem('recordbook_token');
+  const headers = new Headers(init?.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(input, { ...init, headers });
+  if (!res.ok) {
+    let err = 'API error';
+    try { const data = await res.json(); err = data.error || err; } catch(e){}
+    throw new Error(err);
+  }
+  return res;
+}
 // ==================== AUTH ====================
 export interface User {
   id: number;
@@ -18,37 +27,31 @@ export interface SendOtpResponse { message: string; devOtp?: string; }
 export interface VerifyOtpResponse { token: string; user: User; }
 
 export async function sendOtp(phone: string): Promise<SendOtpResponse> {
-  void phone;
-  return { message: 'OTP sent', devOtp: '123456' };
+  const res = await fetchApi(`${API}/auth/send-otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+  return res.json();
 }
 
 export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpResponse> {
-  void otp;
-  return {
-    token: 'mock-token',
-    user: { id: 1, phone, name: 'Test User', createdAt: new Date().toISOString() },
-  };
+  const res = await fetchApi(`${API}/auth/verify-otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, otp }) });
+  return res.json();
 }
 
 export async function getMe(): Promise<User> {
-  return { id: 1, phone: '9999999999', name: 'Test User', createdAt: new Date().toISOString() };
+  const res = await fetchApi(`${API}/auth/me`);
+  return res.json();
 }
 
 // ==================== BUSINESSES ====================
 export interface Business { id: number; name: string; ownerId: number; createdAt: string; }
 
-const businessesCol = () => collection(db, 'businesses');
-
 export async function listBusinesses(): Promise<Business[]> {
-  const snap = await getDocs(businessesCol());
-  return snap.docs.map(d => d.data() as Business);
+  const res = await fetchApi(`${API}/businesses`);
+  return res.json();
 }
 
 export async function createBusiness(name: string): Promise<Business> {
-  const bus: Business = { id: generateId(), name, ownerId: 1, createdAt: new Date().toISOString() };
-  await setDoc(doc(db, 'businesses', bus.id.toString()), bus);
-  await logAction(bus.id, 'Create Business', `Created business: ${name}`);
-  return bus;
+  const res = await fetchApi(`${API}/businesses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  return res.json();
 }
 
 // ==================== FOLDERS ====================
@@ -59,42 +62,23 @@ export interface Folder {
   createdAt: string;
 }
 
-const foldersCol = () => collection(db, 'folders');
-const folderDoc = (id: number) => doc(db, 'folders', id.toString());
-
 export async function listFolders(businessId: number): Promise<Folder[]> {
-  const q = query(foldersCol(), where('businessId', '==', businessId));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => d.data() as Folder);
+  const res = await fetchApi(`${API}/folders?businessId=${businessId}`);
+  return res.json();
 }
 
 export async function createFolder(businessId: number, name: string): Promise<Folder> {
-  const folder: Folder = { id: generateId(), businessId, name, createdAt: new Date().toISOString() };
-  await setDoc(folderDoc(folder.id), folder);
-  await logAction(businessId, 'Create File', `Created file: ${name}`);
-  return folder;
+  const res = await fetchApi(`${API}/folders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, name }) });
+  return res.json();
 }
 
 export async function deleteFolder(folderId: number): Promise<void> {
-  await deleteDoc(folderDoc(folderId));
-  const q = query(registersCol(), where('folderId', '==', folderId));
-  const snap = await getDocs(q);
-  for (const d of snap.docs) {
-    const reg = await getRegDoc(Number(d.id));
-    delete reg.folderId;
-    await saveRegDocImmediate(reg);
-  }
+  await fetchApi(`${API}/folders/${folderId}`, { method: 'DELETE' });
 }
 
 export async function renameFolder(folderId: number, newName: string): Promise<Folder> {
-  const snap = await getDoc(folderDoc(folderId));
-  if (!snap.exists()) throw new Error('Folder not found');
-  const folder = snap.data() as Folder;
-  const oldName = folder.name;
-  folder.name = newName;
-  await setDoc(folderDoc(folderId), folder);
-  await logAction(folder.businessId, 'Rename File', `Renamed file from "${oldName}" to "${newName}"`);
-  return folder;
+  const res = await fetchApi(`${API}/folders/${folderId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }) });
+  return res.json();
 }
 
 
@@ -219,20 +203,10 @@ export async function searchAllRegisters(businessId: number, searchTerm: string)
   return results;
 }
 
-// ── Firestore helpers ─────────────────────────────────────────────────────────
-const registersCol = () => collection(db, 'registers');
-const regDoc = (id: number) => doc(db, 'registers', id.toString());
+// ── REST helpers ──────────────────────────────────────────────────────────────
 
-// Chunked storage: entries are split into subcollection documents of this size
-// to stay well under Firestore's 1 MiB document limit.
-const ENTRIES_PER_CHUNK = 200;
-const chunksCol = (registerId: number) =>
-  collection(db, 'registers', registerId.toString(), 'chunks');
-const chunkDoc = (registerId: number, chunkIndex: number) =>
-  doc(db, 'registers', registerId.toString(), 'chunks', chunkIndex.toString());
-
-// In-memory cache so reads never hit Firestore after the first load
-const firestoreRegisterCache = new Map<number, RegisterDetail>();
+// In-memory cache so reads don't hit server on every mutation
+const registerCache = new Map<number, RegisterDetail>();
 // Mutation queue: ensures operations on the same register run serially to prevent race conditions
 const registerMutationQueues = new Map<string | number, Promise<any>>();
 // Tracks how many mutations are currently pending/running globally
@@ -289,83 +263,45 @@ function populateAutoIncrement(reg: RegisterDetail, columnId: number) {
 }
 
 async function getRegDoc(registerId: number): Promise<RegisterDetail> {
-  // Return a shallow-safe clone from cache — avoids a Firestore round-trip on every mutation
-  if (firestoreRegisterCache.has(registerId)) {
-    return structuredClone(firestoreRegisterCache.get(registerId)!);
+  // Return a shallow-safe clone from cache — avoids a server round-trip on every mutation
+  if (registerCache.has(registerId)) {
+    return structuredClone(registerCache.get(registerId)!);
   }
-  const snap = await getDoc(regDoc(registerId));
-  if (!snap.exists()) throw new Error('Register not found');
-  const data = snap.data() as RegisterDetail;
+  const res = await fetchApi(`${API}/registers/${registerId}`);
+  if (!res.ok) throw new Error('Register not found');
+  const data: RegisterDetail = await res.json();
   
   // Ensure basic arrays exist so mutations don't crash
   if (!data.columns) data.columns = [];
   if (!data.pages) data.pages = [];
   if (!data.sharedWith) data.sharedWith = [];
-
-  // ── Chunked entry loading ──
-  // If the main document has no inline entries, load from subcollection chunks.
-  // Legacy registers that still have entries[] inline will use those directly.
-  if (!data.entries || data.entries.length === 0) {
-    const chunkSnap = await getDocs(chunksCol(registerId));
-    const allEntries: Entry[] = [];
-    chunkSnap.docs.forEach(d => {
-      const chunkData = d.data() as { entries: Entry[] };
-      if (chunkData.entries) allEntries.push(...chunkData.entries);
-    });
-    data.entries = allEntries;
-  }
+  if (!data.entries) data.entries = [];
 
   // Ensure every entry has a cells object
   data.entries.forEach(e => { if (!e.cells) e.cells = {}; });
 
-  // Store the raw Firestore data in cache; return a clone so mutations stay isolated
-  firestoreRegisterCache.set(registerId, data);
+  // Store the raw data in cache; return a clone so mutations stay isolated
+  registerCache.set(registerId, data);
   return structuredClone(data);
 }
 
 /**
- * Immediately persist a register to Firestore — bypasses debounce.
- * Entries are stored in subcollection chunks (200 per chunk) to stay under
- * Firestore's 1 MiB document limit. The main document stores metadata,
- * columns, pages, and settings — but NOT entries.
+ * Immediately persist a register to the REST backend.
+ * The backend handles all storage concerns (chunking is no longer needed).
  */
 async function saveRegDocImmediate(reg: RegisterDetail): Promise<void> {
   // Update cache immediately so subsequent mutations see this state
-  firestoreRegisterCache.set(reg.id, reg);
+  registerCache.set(reg.id, reg);
 
-  // Separate entries from the main document
-  const entries = reg.entries || [];
-  const mainDoc: any = JSON.parse(JSON.stringify(reg));
-  // Remove entries from the main document — they go into subcollection chunks
-  mainDoc.entries = [];
-  mainDoc.entryCount = entries.length;
-
-  // Write the main document (metadata + columns + pages, NO entries)
-  await setDoc(regDoc(reg.id), mainDoc);
-
-  // ── Write entry chunks to subcollection ──
-  // First, delete any existing chunks that are now beyond the new chunk count
-  const existingChunksSnap = await getDocs(chunksCol(reg.id));
-  const newChunkCount = Math.ceil(entries.length / ENTRIES_PER_CHUNK) || 0;
-
-  const deletePromises: Promise<void>[] = [];
-  existingChunksSnap.docs.forEach(d => {
-    const idx = parseInt(d.id, 10);
-    if (idx >= newChunkCount) {
-      deletePromises.push(deleteDoc(d.ref));
-    }
+  const res = await fetchApi(`${API}/registers/${reg.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reg),
   });
-
-  // Write new chunks in parallel
-  const writePromises: Promise<void>[] = [];
-  for (let i = 0; i < entries.length; i += ENTRIES_PER_CHUNK) {
-    const chunkIndex = Math.floor(i / ENTRIES_PER_CHUNK);
-    const chunkEntries = entries.slice(i, i + ENTRIES_PER_CHUNK);
-    const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
-    writePromises.push(setDoc(chunkDoc(reg.id, chunkIndex), cleaned));
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Failed to save register: ${err}`);
   }
-
-  await Promise.all([...deletePromises, ...writePromises]);
 }
 
 async function flushPendingWrite(registerId: number): Promise<void> {
@@ -375,7 +311,7 @@ async function flushPendingWrite(registerId: number): Promise<void> {
 }
 
 /**
- * Flush all pending debounced writes across all registers to Firestore.
+ * Flush all pending debounced writes across all registers to the database.
  */
 export async function flushAllPendingWrites(): Promise<void> {
   await Promise.all(Array.from(registerMutationQueues.values()));
@@ -385,82 +321,22 @@ export async function flushAllPendingWrites(): Promise<void> {
 export function bustRegisterCache(registerId: number): void {
   // Flush any pending write first so it's not lost
   flushPendingWrite(registerId);
-  firestoreRegisterCache.delete(registerId);
+  registerCache.delete(registerId);
 }
 
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export async function listRegisters(businessId: number): Promise<RegisterSummary[]> {
-  const q = query(registersCol(), where('businessId', '==', businessId));
-  const snap = await getDocs(q);
-  const seenIds = new Set<number>();
-  
-  const results = snap.docs
-    .map(d => {
-      let r = d.data() as RegisterDetail;
-      if (firestoreRegisterCache.has(r.id)) {
-        r = firestoreRegisterCache.get(r.id)!;
-      }
-      seenIds.add(r.id);
-      return {
-        id: r.id, businessId: r.businessId, folderId: r.folderId, name: r.name, icon: r.icon, iconColor: r.iconColor,
-        category: r.category, template: r.template, createdAt: r.createdAt, updatedAt: r.updatedAt,
-        entryCount: r.entryCount ?? (r.entries?.length ?? 0),
-        lastActivity: r.lastActivity ?? '',
-        deletedAt: r.deletedAt,
-      };
-    });
-
-  for (const [id, r] of firestoreRegisterCache.entries()) {
-    if (!seenIds.has(id) && r.businessId === businessId) {
-      results.push({
-        id: r.id, businessId: r.businessId, folderId: r.folderId, name: r.name, icon: r.icon, iconColor: r.iconColor,
-        category: r.category, template: r.template, createdAt: r.createdAt, updatedAt: r.updatedAt,
-        entryCount: r.entryCount ?? (r.entries?.length ?? 0),
-        lastActivity: r.lastActivity ?? '',
-        deletedAt: r.deletedAt,
-      });
-    }
-  }
-
-  return results.filter(r => !r.deletedAt);
+  const res = await fetchApi(`${API}/registers?businessId=${businessId}`);
+  const all: RegisterSummary[] = await res.json();
+  return all.filter(r => !r.deletedAt);
 }
 
 export async function listDeletedRegisters(businessId: number): Promise<RegisterSummary[]> {
-  const q = query(registersCol(), where('businessId', '==', businessId));
-  const snap = await getDocs(q);
-  const seenIds = new Set<number>();
-  
-  const results = snap.docs
-    .map(d => {
-      let r = d.data() as RegisterDetail;
-      if (firestoreRegisterCache.has(r.id)) {
-        r = firestoreRegisterCache.get(r.id)!;
-      }
-      seenIds.add(r.id);
-      return {
-        id: r.id, businessId: r.businessId, folderId: r.folderId, name: r.name, icon: r.icon, iconColor: r.iconColor,
-        category: r.category, template: r.template, createdAt: r.createdAt, updatedAt: r.updatedAt,
-        entryCount: r.entryCount ?? (r.entries?.length ?? 0),
-        lastActivity: r.lastActivity ?? '',
-        deletedAt: r.deletedAt,
-      };
-    });
-
-  for (const [id, r] of firestoreRegisterCache.entries()) {
-    if (!seenIds.has(id) && r.businessId === businessId) {
-      results.push({
-        id: r.id, businessId: r.businessId, folderId: r.folderId, name: r.name, icon: r.icon, iconColor: r.iconColor,
-        category: r.category, template: r.template, createdAt: r.createdAt, updatedAt: r.updatedAt,
-        entryCount: r.entryCount ?? (r.entries?.length ?? 0),
-        lastActivity: r.lastActivity ?? '',
-        deletedAt: r.deletedAt,
-      });
-    }
-  }
-
-  return results.filter(r => !!r.deletedAt);
+  const res = await fetchApi(`${API}/registers?businessId=${businessId}`);
+  const all: RegisterSummary[] = await res.json();
+  return all.filter(r => !!r.deletedAt);
 }
 
 export async function getRegister(registerId: number): Promise<RegisterDetail> {
@@ -481,7 +357,7 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
   });
 
   if (hasDuplicates) {
-    // Save the corrected register back to Firestore immediately so it's permanently fixed
+    // Save the corrected register back to the database immediately so it's permanently fixed
     await saveRegDocImmediate(reg);
   }
 
@@ -537,13 +413,8 @@ export async function deleteRegister(registerId: number): Promise<void> {
 
 export async function permanentlyDeleteRegister(registerId: number): Promise<void> {
   const reg = await getRegDoc(registerId);
-  // Delete all entry chunks in subcollection first
-  const chunkSnap = await getDocs(chunksCol(registerId));
-  const chunkDeletes = chunkSnap.docs.map(d => deleteDoc(d.ref));
-  await Promise.all(chunkDeletes);
-  // Then delete the main document
-  await deleteDoc(regDoc(registerId));
-  firestoreRegisterCache.delete(registerId);
+  await fetchApi(`${API}/registers/${registerId}`, { method: 'DELETE' });
+  registerCache.delete(registerId);
   await logAction(reg.businessId, 'Delete Register', `Permanently deleted register: ${reg.name}`, { registerId, registerName: reg.name });
 }
 
@@ -1861,7 +1732,7 @@ export async function removeSharedUser(registerId: number, userId: number): Prom
 
 // ─── Utilities (pure, no DB) ─────────────────────────────────────────────────
 
-/** Manually trigger a save — kept for Ctrl+S compat (now a no-op since data is always in Firestore) */
+/** Manually trigger a save — kept for Ctrl+S compat (now a no-op since data is always in the database) */
 export function saveToStorage(): boolean {
   return true;
 }
@@ -1902,16 +1773,11 @@ export async function logAction(
   meta?: { registerId?: number; registerName?: string }
 ): Promise<void> {
   try {
-    const entry: HistoryEntry = {
-      id: generateId(),
-      businessId,
-      action,
-      details,
-      timestamp: new Date().toISOString(),
-      userName: 'Test User',
-      ...meta,
-    };
-    await setDoc(doc(db, 'history', entry.id.toString()), entry);
+    await fetchApi(`${API}/history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ businessId, action, details, ...meta }),
+    });
   } catch (err) {
     console.error('Failed to log action:', err);
   }
@@ -1919,21 +1785,11 @@ export async function logAction(
 
 export async function listHistory(businessId: number): Promise<HistoryEntry[]> {
   try {
-    const q = query(
-      collection(db, 'history'),
-      where('businessId', '==', businessId),
-      orderBy('timestamp', 'desc')
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => d.data() as HistoryEntry);
-  } catch (err: any) {
-    // Fallback if index not built yet — fetch without orderBy and sort client-side
-    console.warn('listHistory orderBy failed, falling back:', err?.message);
-    const q = query(collection(db, 'history'), where('businessId', '==', businessId));
-    const snap = await getDocs(q);
-    return snap.docs
-      .map(d => d.data() as HistoryEntry)
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    const res = await fetchApi(`${API}/history?businessId=${businessId}`);
+    return res.json();
+  } catch (err) {
+    console.error('Failed to list history:', err);
+    return [];
   }
 }
 
@@ -2059,75 +1915,24 @@ export interface BackupSnapshot {
   folders: Folder[];
 }
 
-const backupsCol = () => collection(db, 'backups');
-const backupDoc = (id: string) => doc(db, 'backups', id);
-
 /**
  * Create a full backup of all registers and folders for a business.
- * Stores the snapshot in Firestore /backups/{id}.
  */
 export async function createBackup(businessId: number, label?: string): Promise<BackupMeta> {
-  const [summaries, folders] = await Promise.all([
-    listRegisters(businessId),
-    listFolders(businessId),
-  ]);
-
-  // Load full register details (including entries)
-  const validRegisters: RegisterDetail[] = [];
-  for (const s of summaries) {
-    try {
-      const reg = await getRegister(s.id);
-      if (reg) validRegisters.push(reg);
-    } catch (err) {
-      console.error(`Failed to load register ${s.id} for backup:`, err);
-    }
-  }
-
-  const totalEntries = validRegisters.reduce((sum, r) => sum + (r.entries?.length ?? 0), 0);
-  const id = `backup_${Date.now()}`;
-  const now = new Date().toISOString();
-
-  const snapshot: BackupSnapshot = {
-    meta: {
-      id,
-      businessId,
-      createdAt: now,
-      label: label || `Backup ${new Date(now).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
-      registerCount: validRegisters.length,
-      folderCount: folders.length,
-      totalEntries,
-      sizeKb: 0,
-    },
-    registers: validRegisters,
-    folders,
-  };
-
-  const jsonSize = Math.round(JSON.stringify(snapshot).length / 1024);
-  snapshot.meta.sizeKb = jsonSize;
-
-  // Firestore has a 1MiB doc limit — split large backups into chunks
-  const mainDoc = { meta: snapshot.meta, folders: snapshot.folders };
-  await setDoc(backupDoc(id), mainDoc);
-
-  // Store registers in chunks of 5 to avoid size limits
-  const CHUNK_SIZE = 5;
-  for (let i = 0; i < validRegisters.length; i += CHUNK_SIZE) {
-    const chunk = validRegisters.slice(i, i + CHUNK_SIZE);
-    await setDoc(doc(db, 'backups', id, 'registerChunks', `chunk_${Math.floor(i / CHUNK_SIZE)}`), { registers: JSON.parse(JSON.stringify(chunk)) });
-  }
-
-  await logAction(businessId, 'Backup Created', `Created backup: ${snapshot.meta.label} (${validRegisters.length} registers, ${totalEntries} entries)`);
-  return snapshot.meta;
+  const res = await fetchApi(`${API}/backups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ businessId, label }),
+  });
+  return res.json();
 }
 
 /**
  * List all available backups for a business, newest first.
  */
 export async function listBackups(businessId: number): Promise<BackupMeta[]> {
-  const q = query(backupsCol(), where('meta.businessId', '==', businessId));
-  const snap = await getDocs(q);
-  const metas = snap.docs.map(d => (d.data() as { meta: BackupMeta }).meta).filter(Boolean);
-  return metas.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const res = await fetchApi(`${API}/backups?businessId=${businessId}`);
+  return res.json();
 }
 
 /**
@@ -2135,75 +1940,17 @@ export async function listBackups(businessId: number): Promise<BackupMeta[]> {
  * WARNING: This is destructive. Current data will be replaced.
  */
 export async function restoreBackup(backupId: string): Promise<void> {
-  const snap = await getDoc(backupDoc(backupId));
-  if (!snap.exists()) throw new Error('Backup not found');
-  const { meta, folders } = snap.data() as { meta: BackupMeta; folders: Folder[] };
-
-  // Load register chunks
-  const chunkSnap = await getDocs(collection(db, 'backups', backupId, 'registerChunks'));
-  const allRegisters: RegisterDetail[] = [];
-  chunkSnap.docs.forEach(d => {
-    const { registers } = d.data() as { registers: RegisterDetail[] };
-    allRegisters.push(...registers);
-  });
-
-  if (allRegisters.length === 0 && meta.registerCount > 0) {
-    throw new Error(`Failed to load registers from backup chunks. Found 0 but expected ${meta.registerCount}.`);
-  }
-
-  // Delete existing registers for this business
-  const existingRegs = await getDocs(query(registersCol(), where('businessId', '==', meta.businessId)));
-  // Delete main docs and their chunks subcollections
-  for (const d of existingRegs.docs) {
-    const regId = Number(d.id);
-    const chunkSnap = await getDocs(chunksCol(regId));
-    await Promise.all([
-      deleteDoc(d.ref),
-      ...chunkSnap.docs.map(cd => deleteDoc(cd.ref))
-    ]);
-  }
-
-  // Delete existing folders
-  const existingFolders = await getDocs(query(foldersCol(), where('businessId', '==', meta.businessId)));
-  await Promise.all(existingFolders.docs.map(d => deleteDoc(d.ref)));
-
-  // Clear cache completely before restoration
-  firestoreRegisterCache.clear();
-
-  // Restore folders
-  await Promise.all(folders.map(f => setDoc(folderDoc(f.id), f)));
-
-  // Restore registers (with chunked entries)
-  let restoredCount = 0;
-  for (const reg of allRegisters) {
-    try {
-      // Ensure the register belongs to the correct business before saving
-      reg.businessId = meta.businessId;
-      await saveRegDocImmediate(reg);
-      restoredCount++;
-    } catch (err) {
-      console.error(`Failed to restore register ${reg.id}:`, err);
-    }
-  }
-
-  // Final cache clear to ensure fresh state
-  firestoreRegisterCache.clear();
-
-  await logAction(meta.businessId, 'Backup Restored', `Restored backup: ${meta.label} (${restoredCount}/${allRegisters.length} registers)`);
-  
-  if (restoredCount < allRegisters.length) {
-    throw new Error(`Restoration partial: only ${restoredCount} of ${allRegisters.length} registers were restored. Check console for details.`);
-  }
+  const res = await fetchApi(`${API}/backups/${backupId}/restore`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to restore backup');
+  // Clear cache completely after restoration
+  registerCache.clear();
 }
 
 /**
  * Delete a backup permanently.
  */
 export async function deleteBackup(backupId: string): Promise<void> {
-  // Delete register chunks subcollection
-  const chunkSnap = await getDocs(collection(db, 'backups', backupId, 'registerChunks'));
-  await Promise.all(chunkSnap.docs.map(d => deleteDoc(d.ref)));
-  await deleteDoc(backupDoc(backupId));
+  await fetchApi(`${API}/backups/${backupId}`, { method: 'DELETE' });
 }
 
 /**
@@ -2217,3 +1964,5 @@ export async function isBackupDue(businessId: number): Promise<boolean> {
   const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
   return lastBackup < threeDaysAgo;
 }
+
+

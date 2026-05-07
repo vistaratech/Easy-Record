@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import pool from './db/pool.js';
 
 dotenv.config();
@@ -14,29 +15,82 @@ function genId() {
   return Date.now() + Math.floor(Math.random() * 1000);
 }
 
+const JWT_SECRET = process.env.JWT_SECRET || 'easy-record-super-secret-jwt-key';
+const OTP_STORE = {}; // In-memory OTP store for dev
+
 // ── AUTH ──
 app.post('/api/auth/send-otp', (req, res) => {
-  res.json({ message: 'OTP sent', devOtp: '123456' });
-});
-app.post('/api/auth/verify-otp', (req, res) => {
   const { phone } = req.body;
-  res.json({ token: 'mock-token', user: { id: 1, phone, name: 'Test User', createdAt: new Date().toISOString() } });
+  if (!phone) return res.status(400).json({ error: 'Phone is required' });
+  
+  const otp = '123456'; // In a real app, generate a random 6 digit code
+  OTP_STORE[phone] = otp;
+  res.json({ message: 'OTP sent', devOtp: otp });
 });
-app.get('/api/auth/me', (req, res) => {
-  res.json({ id: 1, phone: '9999999999', name: 'Test User', createdAt: new Date().toISOString() });
+
+app.post('/api/auth/verify-otp', async (req, res) => {
+  const { phone, otp } = req.body;
+  if (OTP_STORE[phone] !== otp) {
+    return res.status(401).json({ error: 'Invalid OTP' });
+  }
+  delete OTP_STORE[phone];
+
+  try {
+    let { rows } = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
+    let user;
+    if (rows.length === 0) {
+      const id = genId();
+      await pool.query('INSERT INTO users(id, phone, name) VALUES($1, $2, $3)', [id, phone, 'New User']);
+      const { rows: newRows } = await pool.query('SELECT * FROM users WHERE id=$1', [id]);
+      user = newRows[0];
+    } else {
+      user = rows[0];
+    }
+
+    const token = jwt.sign({ id: user.id, phone: user.phone }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user: { id: user.id, phone: user.phone, name: user.name, createdAt: user.created_at } });
+  } catch (err) {
+    console.error('Verify OTP error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Auth Middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Forbidden' });
+    req.user = user;
+    next();
+  });
+};
+
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = rows[0];
+    res.json({ id: user.id, phone: user.phone, name: user.name, createdAt: user.created_at });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // ── BUSINESSES ──
-app.get('/api/businesses', async (req, res) => {
-  const { rows } = await pool.query('SELECT id, name, owner_id AS "ownerId", created_at AS "createdAt" FROM businesses');
+app.get('/api/businesses', authenticateToken, async (req, res) => {
+  const { rows } = await pool.query('SELECT id, name, owner_id AS "ownerId", created_at AS "createdAt" FROM businesses WHERE owner_id=$1', [req.user.id]);
   res.json(rows);
 });
-app.post('/api/businesses', async (req, res) => {
+app.post('/api/businesses', authenticateToken, async (req, res) => {
   const id = genId();
   const { name } = req.body;
-  await pool.query('INSERT INTO businesses(id,name,owner_id) VALUES($1,$2,1)', [id, name]);
+  await pool.query('INSERT INTO businesses(id,name,owner_id) VALUES($1,$2,$3)', [id, name, req.user.id]);
   await logAction(pool, id, 'Create Business', `Created business: ${name}`);
-  res.json({ id, name, ownerId: 1, createdAt: new Date().toISOString() });
+  res.json({ id, name, ownerId: req.user.id, createdAt: new Date().toISOString() });
 });
 
 // ── FOLDERS ──
