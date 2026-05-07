@@ -1,0 +1,355 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import pool from './db/pool.js';
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+
+// ── Helper ──
+function genId() {
+  return Date.now() + Math.floor(Math.random() * 1000);
+}
+
+// ── AUTH ──
+app.post('/api/auth/send-otp', (req, res) => {
+  res.json({ message: 'OTP sent', devOtp: '123456' });
+});
+app.post('/api/auth/verify-otp', (req, res) => {
+  const { phone } = req.body;
+  res.json({ token: 'mock-token', user: { id: 1, phone, name: 'Test User', createdAt: new Date().toISOString() } });
+});
+app.get('/api/auth/me', (req, res) => {
+  res.json({ id: 1, phone: '9999999999', name: 'Test User', createdAt: new Date().toISOString() });
+});
+
+// ── BUSINESSES ──
+app.get('/api/businesses', async (req, res) => {
+  const { rows } = await pool.query('SELECT id, name, owner_id AS "ownerId", created_at AS "createdAt" FROM businesses');
+  res.json(rows);
+});
+app.post('/api/businesses', async (req, res) => {
+  const id = genId();
+  const { name } = req.body;
+  await pool.query('INSERT INTO businesses(id,name,owner_id) VALUES($1,$2,1)', [id, name]);
+  await logAction(pool, id, 'Create Business', `Created business: ${name}`);
+  res.json({ id, name, ownerId: 1, createdAt: new Date().toISOString() });
+});
+
+// ── FOLDERS ──
+app.get('/api/folders', async (req, res) => {
+  const { businessId } = req.query;
+  const { rows } = await pool.query('SELECT id, business_id AS "businessId", name, created_at AS "createdAt" FROM folders WHERE business_id=$1', [businessId]);
+  res.json(rows);
+});
+app.post('/api/folders', async (req, res) => {
+  const { businessId, name } = req.body;
+  const id = genId();
+  await pool.query('INSERT INTO folders(id,business_id,name) VALUES($1,$2,$3)', [id, businessId, name]);
+  await logAction(pool, businessId, 'Create File', `Created file: ${name}`);
+  res.json({ id, businessId, name, createdAt: new Date().toISOString() });
+});
+app.delete('/api/folders/:id', async (req, res) => {
+  const id = req.params.id;
+  await pool.query('UPDATE registers SET folder_id=NULL WHERE folder_id=$1', [id]);
+  await pool.query('DELETE FROM folders WHERE id=$1', [id]);
+  res.json({ ok: true });
+});
+app.patch('/api/folders/:id', async (req, res) => {
+  const { name } = req.body;
+  const { rows } = await pool.query('UPDATE folders SET name=$1 WHERE id=$2 RETURNING id, business_id AS "businessId", name, created_at AS "createdAt"', [name, req.params.id]);
+  res.json(rows[0]);
+});
+
+// ── REGISTERS ──
+app.get('/api/registers', async (req, res) => {
+  const { businessId } = req.query;
+  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
+    category, template, created_at AS "createdAt", updated_at AS "updatedAt", entry_count AS "entryCount",
+    last_activity AS "lastActivity", deleted_at AS "deletedAt" FROM registers WHERE business_id=$1 AND deleted_at IS NULL`, [businessId]);
+  res.json(rows);
+});
+
+app.get('/api/registers/deleted', async (req, res) => {
+  const { businessId } = req.query;
+  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
+    category, template, created_at AS "createdAt", updated_at AS "updatedAt", entry_count AS "entryCount",
+    last_activity AS "lastActivity", deleted_at AS "deletedAt" FROM registers WHERE business_id=$1 AND deleted_at IS NOT NULL`, [businessId]);
+  res.json(rows);
+});
+
+app.get('/api/registers/:id', async (req, res) => {
+  const regId = req.params.id;
+  const { rows: regRows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
+    category, template, columns, pages, share_link AS "shareLink", shared_with AS "sharedWith", deleted_items AS "deletedItems",
+    entry_count AS "entryCount", last_activity AS "lastActivity", deleted_at AS "deletedAt",
+    created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [regId]);
+  if (!regRows.length) return res.status(404).json({ error: 'Register not found' });
+  const reg = regRows[0];
+  const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [regId]);
+  reg.entries = entryRows;
+  if (!reg.pages || reg.pages.length === 0) reg.pages = [{ id: 1, name: 'Page 1', index: 0 }];
+  if (!reg.columns) reg.columns = [];
+  res.json(reg);
+});
+
+app.post('/api/registers', async (req, res) => {
+  const { businessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
+  const id = genId();
+  const cols = (columns || []).map((c, i) => ({ id: id + i + 1, registerId: id, name: c.name, type: c.type, position: i, dropdownOptions: c.dropdownOptions, formula: c.formula, width: c.width, summary: c.summary }));
+  const pages = [{ id: 1, name: 'Page 1', index: 0 }];
+
+  await pool.query(`INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [id, businessId, folderId || null, name, icon || 'file-text', iconColor || null, category || 'general', template || name, JSON.stringify(cols), JSON.stringify(pages), cols.length > 0 ? 10 : 0]);
+
+  // Create 10 default empty rows if columns exist
+  if (cols.length > 0) {
+    const values = [];
+    const params = [];
+    for (let i = 0; i < 10; i++) {
+      const eId = id + 5000 + i;
+      const offset = i * 5;
+      values.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5})`);
+      params.push(eId, id, i + 1, '{}', 0);
+    }
+    await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,page_index) VALUES ${values.join(',')}`, params);
+  }
+  await logAction(pool, businessId, 'Create Register', `Created register: ${name}`, { registerId: id, registerName: name });
+  res.json({ id, businessId, folderId, name, icon: icon || 'file-text', iconColor, category: category || 'general', template: template || name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: cols.length > 0 ? 10 : 0 });
+});
+
+app.delete('/api/registers/:id', async (req, res) => {
+  await pool.query('UPDATE registers SET deleted_at=NOW() WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.delete('/api/registers/:id/permanent', async (req, res) => {
+  await pool.query('DELETE FROM entries WHERE register_id=$1', [req.params.id]);
+  await pool.query('DELETE FROM registers WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.post('/api/registers/:id/restore', async (req, res) => {
+  await pool.query('UPDATE registers SET deleted_at=NULL WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.patch('/api/registers/:id', async (req, res) => {
+  const updates = req.body;
+  const sets = [];
+  const params = [];
+  let idx = 1;
+  if (updates.name !== undefined) { sets.push(`name=$${idx++}`); params.push(updates.name); }
+  if (updates.folderId !== undefined) { sets.push(`folder_id=$${idx++}`); params.push(updates.folderId); }
+  if (updates.columns !== undefined) { sets.push(`columns=$${idx++}`); params.push(JSON.stringify(updates.columns)); }
+  if (updates.pages !== undefined) { sets.push(`pages=$${idx++}`); params.push(JSON.stringify(updates.pages)); }
+  if (updates.sharedWith !== undefined) { sets.push(`shared_with=$${idx++}`); params.push(JSON.stringify(updates.sharedWith)); }
+  if (updates.shareLink !== undefined) { sets.push(`share_link=$${idx++}`); params.push(updates.shareLink); }
+  if (updates.deletedItems !== undefined) { sets.push(`deleted_items=$${idx++}`); params.push(JSON.stringify(updates.deletedItems)); }
+  if (updates.entryCount !== undefined) { sets.push(`entry_count=$${idx++}`); params.push(updates.entryCount); }
+  sets.push(`updated_at=NOW()`);
+  params.push(req.params.id);
+  await pool.query(`UPDATE registers SET ${sets.join(',')} WHERE id=$${idx}`, params);
+  // Return full register
+  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor", category, template, columns, pages, share_link AS "shareLink", shared_with AS "sharedWith", deleted_items AS "deletedItems", entry_count AS "entryCount", created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [req.params.id]);
+  const reg = rows[0];
+  const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [req.params.id]);
+  reg.entries = entryRows;
+  res.json(reg);
+});
+
+app.post('/api/registers/:id/duplicate', async (req, res) => {
+  const origId = req.params.id;
+  const { rows: regRows } = await pool.query('SELECT * FROM registers WHERE id=$1', [origId]);
+  if (!regRows.length) return res.status(404).json({ error: 'Not found' });
+  const orig = regRows[0];
+  const newId = genId();
+  const newCols = (orig.columns || []).map((c, i) => ({ ...c, id: newId + i + 1, registerId: newId }));
+  await pool.query(`INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [newId, orig.business_id, orig.folder_id, orig.name + ' (Copy)', orig.icon, orig.icon_color, orig.category, orig.template, JSON.stringify(newCols), JSON.stringify(orig.pages), orig.entry_count]);
+  // Copy entries
+  const { rows: entries } = await pool.query('SELECT * FROM entries WHERE register_id=$1 ORDER BY row_number', [origId]);
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    await pool.query('INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES($1,$2,$3,$4,$5,$6)',
+      [newId + 1000 + i, newId, e.row_number, JSON.stringify(e.cells), JSON.stringify(e.cell_styles || {}), e.page_index]);
+  }
+  res.json({ id: newId, businessId: orig.business_id, name: orig.name + ' (Copy)', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: orig.entry_count });
+});
+
+// ── ENTRIES ──
+app.post('/api/registers/:regId/entries', async (req, res) => {
+  const regId = req.params.regId;
+  const { cells, pageIndex, atIndex } = req.body;
+  const id = genId();
+  // Get current max row_number for this page
+  const { rows: maxRows } = await pool.query('SELECT COALESCE(MAX(row_number),0) AS max FROM entries WHERE register_id=$1 AND page_index=$2', [regId, pageIndex || 0]);
+  const rowNumber = (maxRows[0]?.max || 0) + 1;
+  await pool.query('INSERT INTO entries(id,register_id,row_number,cells,page_index) VALUES($1,$2,$3,$4,$5)', [id, regId, rowNumber, JSON.stringify(cells || {}), pageIndex || 0]);
+  await pool.query('UPDATE registers SET entry_count=entry_count+1, updated_at=NOW() WHERE id=$1', [regId]);
+  res.json({ id, registerId: Number(regId), rowNumber, cells: cells || {}, createdAt: new Date().toISOString(), pageIndex: pageIndex || 0 });
+});
+
+app.patch('/api/entries/:id', async (req, res) => {
+  const { cells } = req.body;
+  // Merge cells
+  const { rows: existing } = await pool.query('SELECT cells FROM entries WHERE id=$1', [req.params.id]);
+  if (!existing.length) return res.status(404).json({ error: 'Entry not found' });
+  const merged = { ...existing[0].cells, ...cells };
+  await pool.query('UPDATE entries SET cells=$1 WHERE id=$2', [JSON.stringify(merged), req.params.id]);
+  await pool.query('UPDATE registers SET updated_at=NOW() WHERE id=(SELECT register_id FROM entries WHERE id=$1)', [req.params.id]);
+  res.json({ id: Number(req.params.id), cells: merged });
+});
+
+app.patch('/api/entries/:id/styles', async (req, res) => {
+  const { cellStyles } = req.body;
+  const { rows: existing } = await pool.query('SELECT cell_styles FROM entries WHERE id=$1', [req.params.id]);
+  if (!existing.length) return res.status(404).json({ error: 'Entry not found' });
+  const merged = { ...(existing[0].cell_styles || {}), ...cellStyles };
+  await pool.query('UPDATE entries SET cell_styles=$1 WHERE id=$2', [JSON.stringify(merged), req.params.id]);
+  res.json({ id: Number(req.params.id), cellStyles: merged });
+});
+
+app.delete('/api/entries/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT register_id FROM entries WHERE id=$1', [req.params.id]);
+  if (rows.length) {
+    await pool.query('DELETE FROM entries WHERE id=$1', [req.params.id]);
+    await pool.query('UPDATE registers SET entry_count=GREATEST(entry_count-1,0), updated_at=NOW() WHERE id=$1', [rows[0].register_id]);
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/registers/:regId/entries/bulk-delete', async (req, res) => {
+  const { entryIds } = req.body;
+  if (entryIds?.length) {
+    const placeholders = entryIds.map((_, i) => `$${i + 1}`).join(',');
+    await pool.query(`DELETE FROM entries WHERE id IN (${placeholders})`, entryIds);
+    await pool.query('UPDATE registers SET entry_count=(SELECT COUNT(*) FROM entries WHERE register_id=$1), updated_at=NOW() WHERE id=$1', [req.params.regId]);
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/registers/:regId/entries/reorder', async (req, res) => {
+  const { entries } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const e of entries) {
+      await client.query('UPDATE entries SET row_number=$1, cells=$2, page_index=$3, cell_styles=$4 WHERE id=$5',
+        [e.rowNumber, JSON.stringify(e.cells || {}), e.pageIndex || 0, JSON.stringify(e.cellStyles || {}), e.id]);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true });
+});
+
+// ── HISTORY ──
+app.get('/api/history', async (req, res) => {
+  const { businessId } = req.query;
+  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", action, details, user_name AS "userName", register_name AS "registerName", register_id AS "registerId", timestamp FROM history WHERE business_id=$1 ORDER BY timestamp DESC LIMIT 200`, [businessId]);
+  res.json(rows);
+});
+
+// ── SEARCH ──
+app.get('/api/search', async (req, res) => {
+  const { businessId, q } = req.query;
+  if (!q) return res.json([]);
+  const term = `%${q}%`;
+  // Search register names
+  const { rows: regMatches } = await pool.query(`SELECT id AS "registerId", name AS "registerName", folder_id AS "folderId" FROM registers WHERE business_id=$1 AND deleted_at IS NULL AND name ILIKE $2 LIMIT 20`, [businessId, term]);
+  // Search entry cells (JSONB text search)
+  const { rows: entryMatches } = await pool.query(`SELECT e.id AS "entryId", e.register_id AS "registerId", r.name AS "registerName", r.folder_id AS "folderId", e.row_number AS "rowNumber", e.page_index AS "pageIndex", e.cells FROM entries e JOIN registers r ON r.id=e.register_id WHERE r.business_id=$1 AND r.deleted_at IS NULL AND e.cells::text ILIKE $2 LIMIT 50`, [businessId, term]);
+  const results = [
+    ...regMatches.map(r => ({ ...r, entryId: -1, rowNumber: -1, matchedText: r.registerName })),
+    ...entryMatches.map(e => {
+      let matchedText = '';
+      for (const v of Object.values(e.cells || {})) {
+        if (String(v).toLowerCase().includes(String(q).toLowerCase())) { matchedText = String(v); break; }
+      }
+      return { registerId: e.registerId, registerName: e.registerName, folderId: e.folderId, entryId: e.entryId, rowNumber: e.rowNumber, matchedText, pageIndex: e.pageIndex };
+    })
+  ];
+  res.json(results);
+});
+
+// ── BACKUPS ──
+app.get('/api/backups', async (req, res) => {
+  const { businessId } = req.query;
+  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", created_at AS "createdAt", label, register_count AS "registerCount", folder_count AS "folderCount", total_entries AS "totalEntries", size_kb AS "sizeKb" FROM backups WHERE business_id=$1 ORDER BY created_at DESC`, [businessId]);
+  res.json(rows);
+});
+
+app.post('/api/backups', async (req, res) => {
+  const { businessId, label } = req.body;
+  const id = `backup_${Date.now()}`;
+  // Gather all data
+  const { rows: regs } = await pool.query('SELECT * FROM registers WHERE business_id=$1', [businessId]);
+  const { rows: folders } = await pool.query('SELECT * FROM folders WHERE business_id=$1', [businessId]);
+  const allEntries = {};
+  for (const r of regs) {
+    const { rows: entries } = await pool.query('SELECT * FROM entries WHERE register_id=$1', [r.id]);
+    allEntries[r.id] = entries;
+  }
+  const data = { registers: regs, folders, entries: allEntries };
+  const totalEntries = Object.values(allEntries).reduce((s, arr) => s + arr.length, 0);
+  const sizeKb = Math.round(JSON.stringify(data).length / 1024);
+  const now = new Date();
+  const backupLabel = label || `Backup ${now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+  await pool.query('INSERT INTO backups(id,business_id,label,register_count,folder_count,total_entries,size_kb,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+    [id, businessId, backupLabel, regs.length, folders.length, totalEntries, sizeKb, JSON.stringify(data)]);
+  res.json({ id, businessId, createdAt: now.toISOString(), label: backupLabel, registerCount: regs.length, folderCount: folders.length, totalEntries, sizeKb });
+});
+
+app.delete('/api/backups/:id', async (req, res) => {
+  await pool.query('DELETE FROM backups WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.post('/api/backups/:id/restore', async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM backups WHERE id=$1', [req.params.id]);
+  if (!rows.length) return res.status(404).json({ error: 'Backup not found' });
+  const backup = rows[0];
+  const data = backup.data;
+  const businessId = backup.business_id;
+  // Delete existing data
+  await pool.query('DELETE FROM entries WHERE register_id IN (SELECT id FROM registers WHERE business_id=$1)', [businessId]);
+  await pool.query('DELETE FROM registers WHERE business_id=$1', [businessId]);
+  await pool.query('DELETE FROM folders WHERE business_id=$1', [businessId]);
+  // Restore
+  for (const f of data.folders || []) {
+    await pool.query('INSERT INTO folders(id,business_id,name) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', [f.id, businessId, f.name]);
+  }
+  for (const r of data.registers || []) {
+    await pool.query(`INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
+      [r.id, businessId, r.folder_id, r.name, r.icon, r.icon_color, r.category, r.template, JSON.stringify(r.columns), JSON.stringify(r.pages), r.entry_count]);
+    const entries = data.entries?.[r.id] || [];
+    for (const e of entries) {
+      await pool.query('INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',
+        [e.id, r.id, e.row_number, JSON.stringify(e.cells), JSON.stringify(e.cell_styles || {}), e.page_index]);
+    }
+  }
+  res.json({ ok: true });
+});
+
+// ── LOG HELPER ──
+async function logAction(db, businessId, action, details, meta = {}) {
+  try {
+    const id = genId();
+    await db.query('INSERT INTO history(id,business_id,action,details,user_name,register_name,register_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
+      [id, businessId, action, details, 'Test User', meta.registerName || null, meta.registerId || null]);
+  } catch (e) { console.error('Log failed:', e.message); }
+}
+
+// ── HEALTH ──
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`🚀 Easy Record server running on port ${PORT}`));
