@@ -284,7 +284,9 @@ export const Sidebar = memo(function Sidebar({
         </button>
         <div className="mobile-topbar-brand">
           <img src="/logo.jpg" alt="Easy Record" className="mobile-topbar-logo" />
-          <span style={{ fontWeight: 700 }}>Easy Record</span>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.2 }}>
+            <span style={{ fontWeight: 600, fontSize: '15px' }}>Easy Record</span>
+          </div>
         </div>
         <div style={{ width: 40 }} /> {/* Spacer for balance */}
       </div>
@@ -626,12 +628,15 @@ export const Sidebar = memo(function Sidebar({
 
         <div 
           className="sidebar-footer" 
-          style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', background: isFooterMenuOpen ? '#f1f5f9' : 'transparent', borderTop: '1px solid rgba(0,0,0,0.06)' }}
+          style={{ padding: '16px 16px 12px 16px', display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', background: isFooterMenuOpen ? '#f1f5f9' : 'transparent', borderTop: '1px solid rgba(0,0,0,0.06)' }}
           onClick={() => setIsFooterMenuOpen(v => !v)}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <img src="/logo.jpg" alt="Easy Record" className="sidebar-footer-logo" style={{ margin: 0, width: '32px', height: '32px', objectFit: 'contain' }} />
-            <span className="sidebar-footer-text" style={{ fontWeight: 700, fontSize: '15px', color: '#1e293b', whiteSpace: 'nowrap' }}>Easy Record</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src="/logo.jpg" alt="Easy Record" className="sidebar-footer-logo" style={{ margin: 0, width: '28px', height: '28px', objectFit: 'contain', borderRadius: '6px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.2 }}>
+              <span className="sidebar-footer-text" style={{ fontWeight: 600, fontSize: '15px', color: '#334155', whiteSpace: 'nowrap' }}>Easy <span style={{ color: 'var(--accent)' }}>Record</span></span>
+              <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 400, marginTop: '1px', whiteSpace: 'nowrap' }}>Excel Register Book</span>
+            </div>
           </div>
         </div>
 
