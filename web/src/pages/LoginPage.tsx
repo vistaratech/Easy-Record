@@ -55,7 +55,7 @@ export default function LoginPage() {
         <div className="login-logo-wrap">
           <img
             src="/logo-transparent.png"
-            alt="AG Trust Logo"
+            alt="Easy Record Logo"
             className="login-logo-img"
           />
           <span className="login-logo-badge">Trusted Partner</span>

@@ -1,25 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   AG TRUST RECORD BOOK â€” Design Tokens
+   EASY RECORD â€” Design Tokens
    Primary: Navy Blue #1E2D78  |  Accent: Red #E63012  |  Green #4CAF1A
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 :root {
-  /* Primary palette — AG Trust Dark Blue */
+  /* Primary palette — Easy Record Dark Blue */
   --navy: #0D2A5C;
   --navy-light: #1A3A75;
   --navy-dark: #081B3D;
 
-  /* Accent — AG Trust Accent Blue */
+  /* Accent — Easy Record Accent Blue */
   --accent: #1E88E5;
   --accent-dark: #1565C0;
   --accent-light: #E3F2FD;
 
-  /* Brand Green — AG Trust Secondary Green */
+  /* Brand Green — Easy Record Secondary Green */
   --brand-green: #43A047;
   --brand-green-dark: #2E7D32;
 
-  /* Brand Blue — AG Trust Accent Blue */
+  /* Brand Blue — Easy Record Accent Blue */
   --brand-blue: #1E88E5;
   --brand-blue-dark: #1565C0;
   --brand-blue-light: #E3F2FD;
@@ -32,7 +32,7 @@
   --success: #43A047;
   --warning: #FB8C00;
 
-  /* Backgrounds — AG Trust Background Grey/Blue */
+  /* Backgrounds — Easy Record Background Grey/Blue */
   --background: #F5F7FA;
   --bg-light: #FFFFFF;
   --bg-secondary: #EEF2F6;
@@ -53,7 +53,7 @@
   /* Sidebar / Surface */
   --sidebar-bg: #FFFFFF;
   --surface-hover: #F0F4F8;
-  --primary: #E53935; /* AG Trust Primary Red */
+  --primary: #E53935; /* Easy Record Primary Red */
   --primary-light: #ef5350;
   --primary-dark: #c62828;
 
@@ -184,7 +184,7 @@ a {
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    LOGIN PAGE
-   Navy blue gradient background with clean card, AG Trust logo
+   Navy blue gradient background with clean card, Easy Record logo
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .login-page {
   min-height: 100vh;
@@ -233,7 +233,7 @@ a {
   border: 1px solid var(--border);
 }
 
-/* AG Trust logo in login */
+/* Easy Record logo in login */
 .login-logo-wrap {
   display: flex;
   flex-direction: column;
