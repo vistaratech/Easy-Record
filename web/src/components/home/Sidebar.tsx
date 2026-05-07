@@ -626,12 +626,12 @@ export const Sidebar = memo(function Sidebar({
 
         <div 
           className="sidebar-footer" 
-          style={{ padding: '12px', display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', background: isFooterMenuOpen ? '#f1f5f9' : 'transparent', borderTop: '1px solid #e2e8f0', margin: '0 8px', borderRadius: '8px 8px 0 0' }}
+          style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', background: isFooterMenuOpen ? '#f1f5f9' : 'transparent', borderTop: '1px solid rgba(0,0,0,0.06)' }}
           onClick={() => setIsFooterMenuOpen(v => !v)}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <img src="/logo.jpg" alt="Easy Record" className="sidebar-footer-logo" style={{ margin: 0, width: '28px', height: '28px', objectFit: 'contain' }} />
-            <span className="sidebar-footer-text" style={{ fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>Easy Record</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img src="/logo.jpg" alt="Easy Record" className="sidebar-footer-logo" style={{ margin: 0, width: '32px', height: '32px', objectFit: 'contain' }} />
+            <span className="sidebar-footer-text" style={{ fontWeight: 700, fontSize: '15px', color: '#1e293b', whiteSpace: 'nowrap' }}>Easy Record</span>
           </div>
         </div>
 
