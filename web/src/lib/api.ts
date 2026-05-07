@@ -1,7 +1,7 @@
 // REST API client for Easy Record
 import { TEMPLATES, type Template, type TemplateColumn } from './templates';
 
-const API = 'http://localhost:3001/api';
+const API = import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
 
 async function fetchApi(input: string, init?: RequestInit) {
   const token = localStorage.getItem('recordbook_token');
