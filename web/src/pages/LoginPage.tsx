@@ -36,14 +36,15 @@ export default function LoginPage() {
         {/* Logo Section */}
         <div className="login-logo-wrap">
           <img
-            src="/logo-dark-text.png"
+            src="/logo-transparent.png"
             alt="Easy Record Logo"
             className="login-logo-img"
           />
           <span className="login-logo-badge">Trusted Partner</span>
         </div>
 
-        <p className="login-sub" style={{ marginTop: '-12px', marginBottom: '24px' }}>
+        <h1 className="login-title">Easy <span>Record</span></h1>
+        <p className="login-sub">
           {isLogin ? 'Sign in to your account' : 'Create a new account'}
         </p>
 
