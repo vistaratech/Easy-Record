@@ -191,6 +191,55 @@ app.post('/api/registers/:id/restore', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.put('/api/registers/:id', async (req, res) => {
+  const id = req.params.id;
+  const reg = req.body;
+  
+  await pool.query(`
+    INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      business_id=EXCLUDED.business_id,
+      folder_id=EXCLUDED.folder_id,
+      name=EXCLUDED.name,
+      icon=EXCLUDED.icon,
+      icon_color=EXCLUDED.icon_color,
+      category=EXCLUDED.category,
+      template=EXCLUDED.template,
+      columns=EXCLUDED.columns,
+      pages=EXCLUDED.pages,
+      share_link=EXCLUDED.share_link,
+      shared_with=EXCLUDED.shared_with,
+      deleted_items=EXCLUDED.deleted_items,
+      entry_count=EXCLUDED.entry_count,
+      updated_at=NOW()
+  `, [
+    id, reg.businessId, reg.folderId || null, reg.name, reg.icon || 'file-text', reg.iconColor || null,
+    reg.category || 'general', reg.template || reg.name, JSON.stringify(reg.columns || []),
+    JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), reg.shareLink || null,
+    JSON.stringify(reg.sharedWith || []), JSON.stringify(reg.deletedItems || []), reg.entryCount || (reg.entries ? reg.entries.length : 0)
+  ]);
+
+  if (reg.entries && reg.entries.length > 0) {
+    await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
+    const chunkSize = 1000;
+    for (let i = 0; i < reg.entries.length; i += chunkSize) {
+      const chunk = reg.entries.slice(i, i + chunkSize);
+      const cValues = [];
+      const cParams = [];
+      for (let j = 0; j < chunk.length; j++) {
+         const e = chunk[j];
+         const offset = j * 6;
+         cValues.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
+         cParams.push(e.id, id, e.rowNumber || (i+j+1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
+      }
+      await pool.query(`INSERT INTO entries(id, register_id, row_number, cells, cell_styles, page_index) VALUES ${cValues.join(',')}`, cParams);
+    }
+  }
+
+  res.json({ ok: true });
+});
+
 app.patch('/api/registers/:id', async (req, res) => {
   const updates = req.body;
   const sets = [];
@@ -404,6 +453,12 @@ async function logAction(db, businessId, action, details, meta = {}) {
 
 // ── HEALTH ──
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// ── GLOBAL ERROR HANDLER ──
+app.use((err, req, res, next) => {
+  console.error('Unhandled Error:', err);
+  res.status(500).json({ error: 'Internal server error', details: err.message });
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 Easy Record server running on port ${PORT}`));
