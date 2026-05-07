@@ -243,13 +243,12 @@ a {
 }
 
 .login-logo-img {
-  width: 96px;
-  height: 96px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
-  border-radius: var(--radius-lg);
-  background: transparent;
-  padding: 4px;
-  filter: drop-shadow(0 4px 12px rgba(13, 42, 92, 0.20));
+  border-radius: 0;
+  background: #FFFFFF;
+  padding: 0;
 }
 
 .login-logo-badge {
@@ -515,7 +514,7 @@ a {
   height: 36px;
   object-fit: contain;
   background: var(--white);
-  padding: 4px;
+  padding: 0;
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.06);
   flex-shrink: 0;
