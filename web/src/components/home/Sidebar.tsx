@@ -299,7 +299,7 @@ export const Sidebar = memo(function Sidebar({
             <img src="/logo.jpg" alt="Easy Record" className="sidebar-brand-logo" />
             <div className="sidebar-brand-text">
               <div className="sidebar-brand-name">Easy <span>Record</span></div>
-              <div className="sidebar-brand-sub">Record Book</div>
+              <div className="sidebar-brand-sub">Excel Register Book</div>
             </div>
           </div>
           

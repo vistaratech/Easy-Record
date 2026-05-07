@@ -19,7 +19,7 @@ export function DashboardContent({ filtered, excelMutation, handleFileUpload, on
         <div className="empty-state">
           <img src="/logo.jpg" alt="Easy Record" className="empty-logo" />
           <h2 className="empty-title">Welcome to Easy Record</h2>
-          <p className="empty-sub">Create your first register by selecting a template, starting from scratch, or uploading Excel data.</p>
+          <p className="empty-sub">Excel Register Book — Create your first register by selecting a template, starting from scratch, or uploading Excel data.</p>
           <div className="empty-actions">
             <button className="empty-btn" onClick={() => navigate('/templates')}>
               <Plus size={16} />Add New Register

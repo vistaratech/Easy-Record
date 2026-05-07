@@ -125,7 +125,7 @@ export default function BackupPage() {
         <img src="/logo.jpg" alt="Easy Record" style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '6px', background: '#fff', padding: '0' }} />
         <div>
           <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Backup &amp; Restore</h1>
-          <p style={{ margin: 0, fontSize: '13px', opacity: 0.7 }}>Easy Record</p>
+          <p style={{ margin: 0, fontSize: '13px', opacity: 0.7 }}>Excel Register Book</p>
         </div>
       </div>
 

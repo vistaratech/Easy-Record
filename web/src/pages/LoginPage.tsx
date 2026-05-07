@@ -40,7 +40,7 @@ export default function LoginPage() {
             alt="Easy Record Logo"
             className="login-logo-img"
           />
-          <span className="login-logo-badge">Trusted Partner</span>
+          <span className="login-logo-badge">Excel Register Book</span>
         </div>
 
         <h1 className="login-title">Easy <span>Record</span></h1>
