@@ -413,22 +413,22 @@ export async function createRegister(data: {
 
 export async function deleteRegister(registerId: number): Promise<void> {
   const reg = await getRegDoc(registerId);
-  reg.deletedAt = new Date().toISOString();
-  await saveRegDocImmediate(reg);
+  await fetchApi(`${API}/registers/${registerId}`, { method: 'DELETE' });
+  registerCache.delete(registerId);
   await logAction(reg.businessId, 'Trash Register', `Moved register to recycle bin: ${reg.name}`, { registerId, registerName: reg.name });
 }
 
 export async function permanentlyDeleteRegister(registerId: number): Promise<void> {
   const reg = await getRegDoc(registerId);
-  await fetchApi(`${API}/registers/${registerId}`, { method: 'DELETE' });
+  await fetchApi(`${API}/registers/${registerId}/permanent`, { method: 'DELETE' });
   registerCache.delete(registerId);
   await logAction(reg.businessId, 'Delete Register', `Permanently deleted register: ${reg.name}`, { registerId, registerName: reg.name });
 }
 
 export async function restoreRegister(registerId: number): Promise<void> {
   const reg = await getRegDoc(registerId);
-  delete reg.deletedAt;
-  await saveRegDocImmediate(reg);
+  await fetchApi(`${API}/registers/${registerId}/restore`, { method: 'POST' });
+  registerCache.delete(registerId);
   await logAction(reg.businessId, 'Restore Register', `Restored register: ${reg.name}`, { registerId, registerName: reg.name });
 }
 

@@ -120,7 +120,16 @@ export default function HomePage() {
       queryClient.invalidateQueries({ queryKey: ['registers', businessId] }); 
       queryClient.invalidateQueries({ queryKey: ['deletedRegisters', businessId] }); 
       setMenuId(null); 
+      // If the user is currently viewing the deleted register, redirect them to the home page
+      if (location.pathname === `/register/${deletedId}`) {
+        navigate('/');
+      }
     },
+    onError: (error) => {
+      console.error("Failed to delete register:", error);
+      alert("Failed to delete register. Please try again.");
+      setMenuId(null);
+    }
   });
 
   const renameMutation = useMutation({
