@@ -283,7 +283,7 @@ export const Sidebar = memo(function Sidebar({
           <Menu size={20} />
         </button>
         <div className="mobile-topbar-brand">
-          <img src="/logo-transparent.png" alt="Easy Record" className="mobile-topbar-logo" />
+          <img src="/logo.jpg" alt="Easy Record" className="mobile-topbar-logo" />
           <span style={{ fontWeight: 700 }}>Easy Record</span>
         </div>
         <div style={{ width: 40 }} /> {/* Spacer for balance */}
@@ -296,7 +296,7 @@ export const Sidebar = memo(function Sidebar({
       >
         <div className="sidebar-brand">
           <div className="sidebar-brand-group" onClick={() => navigate('/')}>
-            <img src="/logo-transparent.png" alt="Easy Record" className="sidebar-brand-logo" />
+            <img src="/logo.jpg" alt="Easy Record" className="sidebar-brand-logo" />
             <div className="sidebar-brand-text">
               <div className="sidebar-brand-name">Easy <span>Record</span></div>
               <div className="sidebar-brand-sub">Record Book</div>
@@ -630,7 +630,7 @@ export const Sidebar = memo(function Sidebar({
           onClick={() => setIsFooterMenuOpen(v => !v)}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <img src="/logo-transparent.png" alt="Easy Record" className="sidebar-footer-logo" style={{ margin: 0, width: '28px', height: '28px', objectFit: 'contain' }} />
+            <img src="/logo.jpg" alt="Easy Record" className="sidebar-footer-logo" style={{ margin: 0, width: '28px', height: '28px', objectFit: 'contain' }} />
             <span className="sidebar-footer-text" style={{ fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>Easy Record</span>
           </div>
         </div>

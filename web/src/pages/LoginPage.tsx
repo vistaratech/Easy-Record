@@ -36,7 +36,7 @@ export default function LoginPage() {
         {/* Logo Section */}
         <div className="login-logo-wrap">
           <img
-            src="/logo-transparent.png"
+            src="/logo.jpg"
             alt="Easy Record Logo"
             className="login-logo-img"
           />

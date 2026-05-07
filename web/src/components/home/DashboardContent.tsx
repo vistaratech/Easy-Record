@@ -17,7 +17,7 @@ export function DashboardContent({ filtered, excelMutation, handleFileUpload, on
     return (
       <div className="content-area">
         <div className="empty-state">
-          <img src="/logo-transparent.png" alt="Easy Record" className="empty-logo" />
+          <img src="/logo.jpg" alt="Easy Record" className="empty-logo" />
           <h2 className="empty-title">Welcome to Easy Record</h2>
           <p className="empty-sub">Create your first register by selecting a template, starting from scratch, or uploading Excel data.</p>
           <div className="empty-actions">
