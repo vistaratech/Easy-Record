@@ -136,6 +136,11 @@ async function checkRegisterPermission(userId, registerId, type = 'view') {
   return false;
 }
 
+// Shortcut helpers
+const canEdit = (userId, regId) => checkRegisterPermission(userId, regId, 'edit');
+const canView = (userId, regId) => checkRegisterPermission(userId, regId, 'view');
+const canDownload = (userId, regId) => checkRegisterPermission(userId, regId, 'download');
+
 // ── ADMIN ──
 app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
   try {
@@ -212,7 +217,18 @@ app.post('/api/admin/permissions', authenticateToken, adminOnly, async (req, res
 
 // ── BUSINESSES ──
 app.get('/api/businesses', authenticateToken, async (req, res) => {
-  const { rows } = await pool.query('SELECT id, name, owner_id AS "ownerId", created_at AS "createdAt" FROM businesses WHERE owner_id=$1', [req.user.id]);
+  const userId = req.user.id;
+  // Check if admin
+  const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+  const isAdmin = userRows.length > 0 && userRows[0].is_admin;
+
+  const { rows } = await pool.query(`
+    SELECT DISTINCT b.id, b.name, b.owner_id AS "ownerId", b.created_at AS "createdAt"
+    FROM businesses b
+    LEFT JOIN registers r ON r.business_id = b.id
+    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+    WHERE $2 = TRUE OR b.owner_id = $1 OR p.can_view = TRUE
+  `, [userId, isAdmin]);
   res.json(rows);
 });
 app.post('/api/businesses', authenticateToken, async (req, res) => {
@@ -244,38 +260,39 @@ app.post('/api/folders', authenticateToken, async (req, res) => {
 });
 app.delete('/api/folders/:id', authenticateToken, async (req, res) => {
   const id = req.params.id;
-  const { rows: folderCheck } = await pool.query('SELECT business_id FROM folders WHERE id=$1', [id]);
-  if (folderCheck.length === 0) return res.status(404).json({ error: 'Folder not found' });
-  
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [folderCheck[0].business_id, req.user.id]);
-  if (bizCheck.length === 0 && !req.user.isAdmin) return res.status(403).json({ error: 'Forbidden' });
-
   await pool.query('UPDATE registers SET folder_id=NULL WHERE folder_id=$1', [id]);
   await pool.query('DELETE FROM folders WHERE id=$1', [id]);
   res.json({ ok: true });
 });
 app.patch('/api/folders/:id', authenticateToken, async (req, res) => {
-  const id = req.params.id;
-  const { rows: folderCheck } = await pool.query('SELECT business_id FROM folders WHERE id=$1', [id]);
-  if (folderCheck.length === 0) return res.status(404).json({ error: 'Folder not found' });
-  
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [folderCheck[0].business_id, req.user.id]);
-  if (bizCheck.length === 0 && !req.user.isAdmin) return res.status(403).json({ error: 'Forbidden' });
-
   const { name } = req.body;
-  const { rows } = await pool.query('UPDATE folders SET name=$1 WHERE id=$2 RETURNING id, business_id AS "businessId", name, created_at AS "createdAt"', [name, id]);
+  const { rows } = await pool.query('UPDATE folders SET name=$1 WHERE id=$2 RETURNING id, business_id AS "businessId", name, created_at AS "createdAt"', [name, req.params.id]);
   res.json(rows[0]);
 });
 
 // ── REGISTERS ──
 app.get('/api/registers', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
-  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+  const userId = req.user.id;
 
-  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
-    category, template, created_at AS "createdAt", updated_at AS "updatedAt", entry_count AS "entryCount",
-    last_activity AS "lastActivity", deleted_at AS "deletedAt" FROM registers WHERE business_id=$1 AND deleted_at IS NULL`, [businessId]);
+  // Check if admin
+  const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+  const isAdmin = userRows.length > 0 && userRows[0].is_admin;
+
+  // Get registers that the user owns (via business) or has explicit view permission for
+  const { rows } = await pool.query(`
+    SELECT DISTINCT
+      r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
+      r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
+      r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt"
+    FROM registers r
+    LEFT JOIN businesses b ON b.id = r.business_id
+    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+    WHERE r.business_id = $2 
+      AND r.deleted_at IS NULL
+      AND ($3 = TRUE OR b.owner_id = $1 OR p.can_view = TRUE)
+  `, [userId, businessId, isAdmin]);
+
   res.json(rows);
 });
 
@@ -351,32 +368,30 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
 });
 
 app.delete('/api/registers/:id', authenticateToken, async (req, res) => {
-  const regId = req.params.id;
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-  await pool.query('UPDATE registers SET deleted_at=NOW() WHERE id=$1', [regId]);
+  const id = req.params.id;
+  if (!(await canEdit(req.user.id, id))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+  await pool.query('UPDATE registers SET deleted_at=NOW() WHERE id=$1', [id]);
   res.json({ ok: true });
 });
 
 app.delete('/api/registers/:id/permanent', authenticateToken, async (req, res) => {
-  const regId = req.params.id;
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-  await pool.query('DELETE FROM entries WHERE register_id=$1', [regId]);
-  await pool.query('DELETE FROM registers WHERE id=$1', [regId]);
+  const id = req.params.id;
+  if (!(await canEdit(req.user.id, id))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+  await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
+  await pool.query('DELETE FROM registers WHERE id=$1', [id]);
   res.json({ ok: true });
 });
 
 app.post('/api/registers/:id/restore', authenticateToken, async (req, res) => {
-  const regId = req.params.id;
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-  await pool.query('UPDATE registers SET deleted_at=NULL WHERE id=$1', [regId]);
+  const id = req.params.id;
+  if (!(await canEdit(req.user.id, id))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+  await pool.query('UPDATE registers SET deleted_at=NULL WHERE id=$1', [id]);
   res.json({ ok: true });
 });
 
 app.put('/api/registers/:id', authenticateToken, async (req, res) => {
   const id = req.params.id;
+  if (!(await canEdit(req.user.id, id))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
   const reg = req.body;
   
   await pool.query(`
@@ -425,10 +440,8 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
 });
 
 app.patch('/api/registers/:id', authenticateToken, async (req, res) => {
-  const regId = req.params.id;
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-
+  const id = req.params.id;
+  if (!(await canEdit(req.user.id, id))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
   const updates = req.body;
   const sets = [];
   const params = [];
@@ -442,21 +455,19 @@ app.patch('/api/registers/:id', authenticateToken, async (req, res) => {
   if (updates.deletedItems !== undefined) { sets.push(`deleted_items=$${idx++}`); params.push(JSON.stringify(updates.deletedItems)); }
   if (updates.entryCount !== undefined) { sets.push(`entry_count=$${idx++}`); params.push(updates.entryCount); }
   sets.push(`updated_at=NOW()`);
-  params.push(regId);
+  params.push(req.params.id);
   await pool.query(`UPDATE registers SET ${sets.join(',')} WHERE id=$${idx}`, params);
   // Return full register
-  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor", category, template, columns, pages, share_link AS "shareLink", shared_with AS "sharedWith", deleted_items AS "deletedItems", entry_count AS "entryCount", created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [regId]);
+  const { rows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor", category, template, columns, pages, share_link AS "shareLink", shared_with AS "sharedWith", deleted_items AS "deletedItems", entry_count AS "entryCount", created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [req.params.id]);
   const reg = rows[0];
-  const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [regId]);
+  const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [req.params.id]);
   reg.entries = entryRows;
   res.json(reg);
 });
 
 app.post('/api/registers/:id/duplicate', authenticateToken, async (req, res) => {
   const origId = req.params.id;
-  const canEdit = await checkRegisterPermission(req.user.id, origId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-
+  if (!(await canEdit(req.user.id, origId))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
   const { rows: regRows } = await pool.query('SELECT * FROM registers WHERE id=$1', [origId]);
   if (!regRows.length) return res.status(404).json({ error: 'Not found' });
   const orig = regRows[0];
@@ -509,9 +520,7 @@ app.patch('/api/entries/:id/styles', authenticateToken, async (req, res) => {
   const { rows: entryData } = await pool.query('SELECT register_id FROM entries WHERE id=$1', [req.params.id]);
   if (!entryData.length) return res.status(404).json({ error: 'Entry not found' });
   const regId = entryData[0].register_id;
-
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+  if (!(await canEdit(req.user.id, regId))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
 
   const { cellStyles } = req.body;
   const { rows: existing } = await pool.query('SELECT cell_styles FROM entries WHERE id=$1', [req.params.id]);
@@ -522,22 +531,18 @@ app.patch('/api/entries/:id/styles', authenticateToken, async (req, res) => {
 
 app.delete('/api/entries/:id', authenticateToken, async (req, res) => {
   const { rows } = await pool.query('SELECT register_id FROM entries WHERE id=$1', [req.params.id]);
-  if (!rows.length) return res.status(404).json({ error: 'Entry not found' });
-  const regId = rows[0].register_id;
-
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-
-  await pool.query('DELETE FROM entries WHERE id=$1', [req.params.id]);
-  await pool.query('UPDATE registers SET entry_count=GREATEST(entry_count-1,0), updated_at=NOW() WHERE id=$1', [regId]);
+  if (rows.length) {
+    const regId = rows[0].register_id;
+    if (!(await canEdit(req.user.id, regId))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+    await pool.query('DELETE FROM entries WHERE id=$1', [req.params.id]);
+    await pool.query('UPDATE registers SET entry_count=GREATEST(entry_count-1,0), updated_at=NOW() WHERE id=$1', [regId]);
+  }
   res.json({ ok: true });
 });
 
 app.post('/api/registers/:regId/entries/bulk-delete', authenticateToken, async (req, res) => {
   const regId = req.params.regId;
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-
+  if (!(await canEdit(req.user.id, regId))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
   const { entryIds } = req.body;
   if (entryIds?.length) {
     const placeholders = entryIds.map((_, i) => `$${i + 1}`).join(',');
@@ -549,9 +554,7 @@ app.post('/api/registers/:regId/entries/bulk-delete', authenticateToken, async (
 
 app.post('/api/registers/:regId/entries/reorder', authenticateToken, async (req, res) => {
   const regId = req.params.regId;
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-
+  if (!(await canEdit(req.user.id, regId))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
   const { entries } = req.body;
   const client = await pool.connect();
   try {
