@@ -3241,8 +3241,7 @@ export default function RegisterPage() {
             <AlertCircle size={48} />
           </div>
           <h2>Permission Required</h2>
-          <p>You need admin permission to view this register.</p>
-          <p style={{ fontSize: '13px', color: '#64748b', marginTop: '8px' }}>Contact your administrator to request access.</p>
+          <p>Please contact the admin for permission.</p>
           <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
             Go Back Home
           </button>
@@ -3261,8 +3260,7 @@ export default function RegisterPage() {
             <AlertCircle size={48} />
           </div>
           <h2>Permission Required</h2>
-          <p>You need admin permission to view this register.</p>
-          <p style={{ fontSize: '13px', color: '#64748b', marginTop: '8px' }}>Contact your administrator to request access.</p>
+          <p>Please contact the admin for permission.</p>
           <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
             Go Back Home
           </button>
