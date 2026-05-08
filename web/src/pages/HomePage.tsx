@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import toast from 'react-hot-toast';
-import { useNavigate, Routes, Route, useParams } from 'react-router-dom';
+import { useNavigate, Routes, Route, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listBusinesses, createBusiness, listRegisters, deleteRegister,
@@ -35,6 +35,8 @@ export interface ImportSession {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isAdminPath = location.pathname.startsWith('/admin');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [menuId, setMenuId] = useState<number | null>(null);
@@ -297,41 +299,45 @@ export default function HomePage() {
 
   return (
     <div className="app-layout">
-      <Sidebar
-        importSession={importSession}
-        onClearImport={() => setImportSession(null)}
-        businesses={businesses}
-        filtered={filtered}
-        search={search}
-        setSearch={setSearch}
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        menuId={menuId}
-        setMenuId={setMenuId}
-        onInputFolder={handleFolderUpload}
-        onInputExcel={handleFileUpload}
-        clipboard={clipboard}
-        setClipboard={setClipboard}
-        sidebarWidth={sidebarWidth}
-        isCollapsed={isSidebarCollapsed}
-        toggleCollapse={toggleCollapse}
-        unreadCount={unreadCount}
-        onToggleNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)}
-      />
+      {!isAdminPath && (
+        <>
+          <Sidebar
+            importSession={importSession}
+            onClearImport={() => setImportSession(null)}
+            businesses={businesses}
+            filtered={filtered}
+            search={search}
+            setSearch={setSearch}
+            sidebarOpen={sidebarOpen}
+            setSidebarOpen={setSidebarOpen}
+            menuId={menuId}
+            setMenuId={setMenuId}
+            onInputFolder={handleFolderUpload}
+            onInputExcel={handleFileUpload}
+            clipboard={clipboard}
+            setClipboard={setClipboard}
+            sidebarWidth={sidebarWidth}
+            isCollapsed={isSidebarCollapsed}
+            toggleCollapse={toggleCollapse}
+            unreadCount={unreadCount}
+            onToggleNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)}
+          />
 
-      <NotificationPanel 
-        isOpen={isNotificationsOpen} 
-        onClose={() => setIsNotificationsOpen(false)} 
-      />
+          <NotificationPanel 
+            isOpen={isNotificationsOpen} 
+            onClose={() => setIsNotificationsOpen(false)} 
+          />
 
-      {/* ── Draggable resize handle ── */}
-      {!isSidebarCollapsed && (
-        <div
-          className="sidebar-resize-handle"
-          onMouseDown={onResizeStart}
-          onDoubleClick={() => { setSidebarWidth(SIDEBAR_DEFAULT); localStorage.setItem('sidebar-width', String(SIDEBAR_DEFAULT)); }}
-          title="Drag to resize sidebar · Double-click to reset"
-        />
+          {/* ── Draggable resize handle ── */}
+          {!isSidebarCollapsed && (
+            <div
+              className="sidebar-resize-handle"
+              onMouseDown={onResizeStart}
+              onDoubleClick={() => { setSidebarWidth(SIDEBAR_DEFAULT); localStorage.setItem('sidebar-width', String(SIDEBAR_DEFAULT)); }}
+              title="Drag to resize sidebar · Double-click to reset"
+            />
+          )}
+        </>
       )}
 
       <Routes>

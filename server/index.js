@@ -138,8 +138,9 @@ app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, as
         COALESCE(p.can_edit, FALSE) AS "canEdit",
         COALESCE(p.can_download, FALSE) AS "canDownload"
       FROM registers r
+      INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL
+      WHERE r.deleted_at IS NULL AND b.owner_id = $1
       ORDER BY r.name
     `, [userId]);
     res.json(rows);

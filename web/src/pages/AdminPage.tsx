@@ -7,8 +7,7 @@ import {
 } from '../lib/api';
 import { 
   Users, Shield, Eye, Pencil, Download, ChevronRight, Search, 
-  Loader2, Check, LayoutDashboard, Settings, Activity, 
-  ArrowLeft, MoreVertical, RefreshCw
+  Loader2, Check, ArrowLeft, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -16,7 +15,6 @@ export default function AdminPage() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<'users' | 'overview' | 'settings'>('users');
   
   // Stats and other data will be added here
 
@@ -42,26 +40,9 @@ export default function AdminPage() {
         </div>
         
         <nav className="admin-nav">
-          <button 
-            className={`admin-nav-item ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-          >
-            <LayoutDashboard size={18} />
-            <span>Overview</span>
-          </button>
-          <button 
-            className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`}
-            onClick={() => setActiveTab('users')}
-          >
+          <button className="admin-nav-item active">
             <Users size={18} />
             <span>Users</span>
-          </button>
-          <button 
-            className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <Settings size={18} />
-            <span>System</span>
           </button>
         </nav>
 
@@ -77,10 +58,7 @@ export default function AdminPage() {
       <main className="admin-main">
         <header className="admin-topbar">
           <div className="topbar-left">
-            <h1 className="admin-title">
-              {activeTab === 'users' ? 'User Management' : 
-               activeTab === 'overview' ? 'System Overview' : 'Settings'}
-            </h1>
+            <h1 className="admin-title">User Management</h1>
           </div>
           <div className="topbar-right">
             <button className="refresh-btn" onClick={() => refetchUsers()} title="Refresh Data">
@@ -93,8 +71,7 @@ export default function AdminPage() {
         </header>
 
         <div className="admin-view-content">
-          {activeTab === 'users' ? (
-            <div className="admin-users-grid">
+          <div className="admin-users-grid">
               {/* User List Panel */}
               <div className="glass-panel user-list-panel">
                 <div className="panel-header">
@@ -156,15 +133,6 @@ export default function AdminPage() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="glass-panel placeholder-panel">
-              <div className="empty-panel">
-                <Activity size={40} />
-                <h4>Coming Soon</h4>
-                <p>This section is currently under development.</p>
-              </div>
-            </div>
-          )}
         </div>
       </main>
     </div>
@@ -222,8 +190,8 @@ function PermissionsManager({ user }: { user: User }) {
             {user.name?.[0].toUpperCase() || user.email[0].toUpperCase()}
           </div>
           <div>
-            <h3>{user.name || 'User Profile'}</h3>
-            <p>{user.email}</p>
+            <h3>{user.name || 'User'}'s Created Registers</h3>
+            <p>Managing {localPermissions.length} registers</p>
           </div>
         </div>
         <div className="manager-actions">
@@ -237,7 +205,6 @@ function PermissionsManager({ user }: { user: User }) {
               <span>Save Access</span>
             </button>
           )}
-          <button className="options-btn"><MoreVertical size={18} /></button>
         </div>
       </div>
 
@@ -257,7 +224,7 @@ function PermissionsManager({ user }: { user: User }) {
             </div>
             <div className="perm-switches">
               <Switch 
-                label="View" 
+                label="View-Only" 
                 active={p.canView} 
                 onClick={() => togglePermission(p.registerId, 'canView')}
                 icon={<Eye size={12} />}
@@ -269,7 +236,7 @@ function PermissionsManager({ user }: { user: User }) {
                 icon={<Pencil size={12} />}
               />
               <Switch 
-                label="Export" 
+                label="Download" 
                 active={p.canDownload} 
                 onClick={() => togglePermission(p.registerId, 'canDownload')}
                 icon={<Download size={12} />}
