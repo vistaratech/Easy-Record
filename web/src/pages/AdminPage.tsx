@@ -85,7 +85,7 @@ export default function AdminPage() {
                 <div className="panel-header">
                   <div className="panel-header-top">
                     <h3>Members</h3>
-                    <span className="count-badge">{users.length}</span>
+                    <span className="count-badge">{usersLoading ? '...' : users.length}</span>
                   </div>
                   <div className="search-wrapper">
                     <Search size={16} className="search-icon" />
