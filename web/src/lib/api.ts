@@ -1990,6 +1990,7 @@ export interface AdminStats {
 export interface UserPermission {
   registerId: number;
   registerName: string;
+  businessName?: string;
   canView: boolean;
   canEdit: boolean;
   canDownload: boolean;

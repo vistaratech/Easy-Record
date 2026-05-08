@@ -99,12 +99,19 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
-// Admin Middleware
-const adminOnly = (req, res, next) => {
-  if (!req.user || !req.user.isAdmin) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+// Admin Middleware — checks the database directly so newly promoted admins work without re-login
+const adminOnly = async (req, res, next) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { rows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [req.user.id]);
+    if (!rows.length || !rows[0].is_admin) {
+      return res.status(403).json({ error: 'Forbidden: Admin access required' });
+    }
+    next();
+  } catch (err) {
+    console.error('Admin check error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  next();
 };
 
 // ── ADMIN ──
@@ -131,21 +138,25 @@ app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
 app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { userId } = req.params;
-    // Get all registers and join with permissions for this user
+    // Get ALL registers across the entire system and join with permissions for this user
     const { rows } = await pool.query(`
       SELECT 
         r.id AS "registerId", 
         r.name AS "registerName",
+        b.name AS "businessName",
         COALESCE(p.can_view, FALSE) AS "canView",
         COALESCE(p.can_edit, FALSE) AS "canEdit",
         COALESCE(p.can_download, FALSE) AS "canDownload"
       FROM registers r
+      INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
       WHERE r.deleted_at IS NULL
-      ORDER BY r.name
+      ORDER BY b.name, r.name
     `, [userId]);
+    console.log(`Permissions fetch for user ${userId}: found ${rows.length} registers`);
     res.json(rows);
   } catch (err) {
+    console.error('Permissions fetch error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -7,7 +7,7 @@ import {
 } from '../lib/api';
 import { 
   Users, Shield, Eye, Pencil, Download, ChevronRight, Search, 
-  Loader2, Check, ArrowLeft, RefreshCw
+  Loader2, Check, ArrowLeft, RefreshCw, FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../lib/auth';
@@ -61,6 +61,9 @@ export default function AdminPage() {
         <header className="admin-topbar">
           <div className="topbar-left">
             <h1 className="admin-title">User Management</h1>
+            <span className="admin-subtitle">
+              {usersLoading ? 'Loading...' : `${users.length} total users in system`}
+            </span>
           </div>
           <div className="topbar-right">
             <button className="refresh-btn" onClick={() => refetchUsers()} title="Refresh Data">
@@ -69,7 +72,7 @@ export default function AdminPage() {
             <div className="admin-profile">
               <div className="admin-info">
                 <span className="admin-name">{currentUser?.name || currentUser?.email}</span>
-                <span className="admin-tag">{currentUser?.isAdmin ? 'Administrator' : 'User'}</span>
+                <span className="admin-tag">Administrator</span>
               </div>
               <div className="admin-avatar">
                 {currentUser?.name?.[0].toUpperCase() || currentUser?.email?.[0].toUpperCase() || 'A'}
@@ -84,7 +87,7 @@ export default function AdminPage() {
               <div className="glass-panel user-list-panel">
                 <div className="panel-header">
                   <div className="panel-header-top">
-                    <h3>Members</h3>
+                    <h3>All Users</h3>
                     <span className="count-badge">{usersLoading ? '...' : users.length}</span>
                   </div>
                   <div className="search-wrapper">
@@ -106,12 +109,12 @@ export default function AdminPage() {
                     </div>
                   ) : usersError ? (
                     <div className="empty-panel">
-                      <Shield size={40} className="text-red-500" />
-                      <h4>Connection Failed</h4>
-                      <p>Could not fetch user list. Please check your admin permissions or network.</p>
+                      <Shield size={40} style={{ color: '#ef4444' }} />
+                      <h4>Access Denied</h4>
+                      <p>Could not fetch user list. Your account may not have admin privileges. Please log out and log in again.</p>
                       <button className="save-btn" onClick={() => refetchUsers()}>Retry</button>
                     </div>
-                  ) : filteredUsers && filteredUsers.length > 0 ? (
+                  ) : filteredUsers.length > 0 ? (
                     filteredUsers.map(user => (
                       <div 
                         key={user.id} 
@@ -120,11 +123,11 @@ export default function AdminPage() {
                       >
                         <div className="user-card-main">
                           <div className="user-icon-bg">
-                            {user.name?.[0].toUpperCase() || user.email[0].toUpperCase()}
+                            {user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || '?'}
                           </div>
                           <div className="user-card-info">
-                            <p className="user-card-name">{user.name || 'Unknown User'}</p>
-                            <p className="user-card-email">{user.email}</p>
+                            <p className="user-card-name">{user.name || 'Unnamed User'}</p>
+                            <p className="user-card-email">{user.email || 'No email'}</p>
                           </div>
                         </div>
                         {user.isAdmin && <Shield size={14} className="admin-icon" />}
@@ -135,7 +138,7 @@ export default function AdminPage() {
                     <div className="empty-panel">
                       <Users size={40} />
                       <h4>No Users Found</h4>
-                      <p>No members match your current search criteria.</p>
+                      <p>No members match your search.</p>
                     </div>
                   )}
                 </div>
@@ -151,7 +154,7 @@ export default function AdminPage() {
                       <Users size={40} />
                     </div>
                     <h4>No User Selected</h4>
-                    <p>Pick a member from the list to view and manage their register permissions.</p>
+                    <p>Select a user from the list to view and manage their access permissions across all registers.</p>
                   </div>
                 )}
               </div>
@@ -166,7 +169,7 @@ function PermissionsManager({ user }: { user: User }) {
   const queryClient = useQueryClient();
   const [localPermissions, setLocalPermissions] = useState<UserPermission[]>([]);
   
-  const { data: permissions, isLoading } = useQuery({
+  const { data: permissions, isLoading, isError } = useQuery({
     queryKey: ['userPermissions', user.id],
     queryFn: () => getUserPermissions(user.id)
   });
@@ -179,10 +182,10 @@ function PermissionsManager({ user }: { user: User }) {
   const updateMutation = useMutation({
     mutationFn: (newPerms: Partial<UserPermission>[]) => updateUserPermissions(user.id, newPerms),
     onSuccess: () => {
-      toast.success('Permissions updated');
+      toast.success('Permissions saved successfully');
       queryClient.invalidateQueries({ queryKey: ['userPermissions', user.id] });
     },
-    onError: () => toast.error('Update failed')
+    onError: () => toast.error('Failed to save permissions')
   });
 
   const togglePermission = (registerId: number, field: keyof UserPermission) => {
@@ -200,7 +203,17 @@ function PermissionsManager({ user }: { user: User }) {
     return (
       <div className="admin-loader">
         <Loader2 size={32} className="animate-spin" />
-        <p>Syncing Permissions...</p>
+        <p>Loading registers...</p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="empty-panel">
+        <Shield size={40} style={{ color: '#ef4444' }} />
+        <h4>Failed to Load</h4>
+        <p>Could not fetch register permissions for this user.</p>
       </div>
     );
   }
@@ -210,11 +223,11 @@ function PermissionsManager({ user }: { user: User }) {
       <div className="manager-header">
         <div className="manager-user-info">
           <div className="manager-avatar">
-            {user.name?.[0].toUpperCase() || user.email[0].toUpperCase()}
+            {user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || '?'}
           </div>
           <div>
-            <h3>{user.name || 'User'}'s Access Control</h3>
-            <p>Manage permissions for {localPermissions.length} registers</p>
+            <h3>{user.name || 'User'}</h3>
+            <p>{user.email || 'No email'} · {localPermissions.length} registers</p>
           </div>
         </div>
         <div className="manager-actions">
@@ -225,7 +238,7 @@ function PermissionsManager({ user }: { user: User }) {
               disabled={updateMutation.isPending}
             >
               {updateMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-              <span>Save Access</span>
+              <span>Save Permissions</span>
             </button>
           )}
         </div>
@@ -233,21 +246,24 @@ function PermissionsManager({ user }: { user: User }) {
 
       <div className="permissions-list">
         <div className="permissions-table-header">
-          <div className="col-reg">Register Name</div>
-          <div className="col-perm">Access Levels</div>
+          <div className="col-reg">Register</div>
+          <div className="col-perm">View-Only · Edit · Download</div>
         </div>
         
         {localPermissions.length === 0 ? (
-          <div className="no-registers">This user has no registers yet.</div>
+          <div className="no-registers">
+            <FileText size={24} style={{ opacity: 0.4 }} />
+            <p>No registers exist in the system yet.</p>
+          </div>
         ) : localPermissions.map(p => (
           <div key={p.registerId} className="permission-row">
             <div className="reg-info">
               <span className="reg-name">{p.registerName}</span>
-              <span className="reg-id">ID: {p.registerId}</span>
+              {p.businessName && <span className="reg-business">{p.businessName}</span>}
             </div>
             <div className="perm-switches">
               <Switch 
-                label="View-Only" 
+                label="View" 
                 active={p.canView} 
                 onClick={() => togglePermission(p.registerId, 'canView')}
                 icon={<Eye size={12} />}

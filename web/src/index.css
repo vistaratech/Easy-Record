@@ -7432,6 +7432,18 @@ body.modal-open {
   margin: 0;
 }
 
+.admin-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+}
+
 .topbar-right {
   display: flex;
   align-items: center;
@@ -7796,6 +7808,25 @@ body.modal-open {
   color: #94a3b8;
   margin-top: 2px;
 }
+
+.reg-business {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.no-registers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: #94a3b8;
+  text-align: center;
+}
+
 
 .perm-switches {
   width: 340px;
