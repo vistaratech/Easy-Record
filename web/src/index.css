@@ -8910,3 +8910,53 @@ body.modal-open {
   font-weight: 600;
   letter-spacing: 0.5px;
 }
+
+.admin-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px;
+}
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+}
+.stat-icon-bg {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.stat-icon-bg.users {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+.stat-icon-bg.shield {
+  background: #f0fdf4;
+  color: #22c55e;
+}
+.stat-details {
+  display: flex;
+  flex-direction: column;
+}
+.stat-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 4px 0;
+}
+.stat-trend {
+  font-size: 12px;
+  font-weight: 600;
+}
+.stat-trend.positive {
+  color: #22c55e;
+}
