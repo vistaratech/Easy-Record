@@ -276,7 +276,14 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
     return structuredClone(registerCache.get(registerId)!);
   }
   const res = await fetchApi(`${API}/registers/${registerId}`);
-  if (!res.ok) throw new Error('Register not found');
+  if (!res.ok) {
+    if (res.status === 403) {
+      const err = new Error('ACCESS_DENIED');
+      (err as any).status = 403;
+      throw err;
+    }
+    throw new Error('Register not found');
+  }
   const data: RegisterDetail = await res.json();
   
   // Ensure basic arrays exist so mutations don't crash

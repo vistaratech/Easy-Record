@@ -3227,6 +3227,30 @@ export default function RegisterPage() {
     </div>
   );
 
+  // Handle access denied (403) — show "You need admin permission"
+  const isAccessDenied = error && (
+    (error as any)?.status === 403 || 
+    (error as any)?.message === 'ACCESS_DENIED'
+  );
+
+  if (isAccessDenied) {
+    return (
+      <div className="content-area">
+        <div className="empty-state">
+          <div style={{ color: 'var(--destructive)', marginBottom: '16px' }}>
+            <AlertCircle size={48} />
+          </div>
+          <h2>Permission Required</h2>
+          <p>You need admin permission to view this register.</p>
+          <p style={{ fontSize: '13px', color: '#64748b', marginTop: '8px' }}>Contact your administrator to request access.</p>
+          <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
+            Go Back Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!register) return <div className="empty-state"><p>Register not found</p></div>;
 
   if (!permissions.canView) {
@@ -3236,8 +3260,9 @@ export default function RegisterPage() {
           <div style={{ color: 'var(--destructive)', marginBottom: '16px' }}>
             <AlertCircle size={48} />
           </div>
-          <h2>Access Denied</h2>
+          <h2>Permission Required</h2>
           <p>You need admin permission to view this register.</p>
+          <p style={{ fontSize: '13px', color: '#64748b', marginTop: '8px' }}>Contact your administrator to request access.</p>
           <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
             Go Back Home
           </button>
