@@ -10,22 +10,24 @@ import {
   Loader2, Check, ArrowLeft, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../lib/auth';
 
 export default function AdminPage() {
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   
-  // Stats and other data will be added here
-
-  const { data: users, isLoading: usersLoading, isError: usersError, refetch: refetchUsers } = useQuery({
+  const { data: rawUsers, isLoading: usersLoading, isError: usersError, refetch: refetchUsers } = useQuery({
     queryKey: ['adminUsers'],
     queryFn: listAllUsers
   });
 
-  const filteredUsers = users?.filter(u => 
+  const users = Array.isArray(rawUsers) ? rawUsers : [];
+
+  const filteredUsers = users.filter(u => 
     (u.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -65,7 +67,13 @@ export default function AdminPage() {
               <RefreshCw size={16} className={usersLoading ? 'animate-spin' : ''} />
             </button>
             <div className="admin-profile">
-              <div className="admin-avatar">AD</div>
+              <div className="admin-info">
+                <span className="admin-name">{currentUser?.name || currentUser?.email}</span>
+                <span className="admin-tag">{currentUser?.isAdmin ? 'Administrator' : 'User'}</span>
+              </div>
+              <div className="admin-avatar">
+                {currentUser?.name?.[0].toUpperCase() || currentUser?.email?.[0].toUpperCase() || 'A'}
+              </div>
             </div>
           </div>
         </header>
@@ -77,7 +85,7 @@ export default function AdminPage() {
                 <div className="panel-header">
                   <div className="panel-header-top">
                     <h3>Members</h3>
-                    <span className="count-badge">{filteredUsers?.length || 0}</span>
+                    <span className="count-badge">{users.length}</span>
                   </div>
                   <div className="search-wrapper">
                     <Search size={16} className="search-icon" />

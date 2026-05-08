@@ -6712,6 +6712,47 @@ body.modal-open {
   justify-content: flex-end;
 }
 
+.admin-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+
+.admin-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.admin-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
 .side-panel-overlay {
   position: absolute;
   inset: 0;
