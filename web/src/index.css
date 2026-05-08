@@ -74,6 +74,7 @@
   --danger: #E53935;
 }
 
+.saving-indicator { display: flex; align-items: center; gap: 8px; color: #1e293b; font-size: 13px; font-weight: 500; opacity: 0.7; }
 * {
   margin: 0;
   padding: 0;
@@ -172,6 +173,7 @@ a {
 }
 
 /* Firefox */
+.saving-indicator { display: flex; align-items: center; gap: 8px; color: #1e293b; font-size: 13px; font-weight: 500; opacity: 0.7; }
 * {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
