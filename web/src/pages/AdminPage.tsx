@@ -2,27 +2,23 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { 
-  getAdminStats, listAllUsers, getUserPermissions, updateUserPermissions,
+  listAllUsers, getUserPermissions, updateUserPermissions,
   type User, type UserPermission 
 } from '../lib/api';
 import { 
   Users, Shield, Eye, Pencil, Download, ChevronRight, Search, 
-  Loader2, Check, X, LayoutDashboard, Settings, Activity, 
-  ArrowLeft, Mail, Phone, Calendar, LogOut, MoreVertical, RefreshCw
+  Loader2, Check, LayoutDashboard, Settings, Activity, 
+  ArrowLeft, MoreVertical, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'overview' | 'settings'>('users');
   
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['adminStats'],
-    queryFn: getAdminStats
-  });
+  // Stats and other data will be added here
 
   const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useQuery({
     queryKey: ['adminUsers'],
@@ -181,8 +177,7 @@ function PermissionsManager({ user }: { user: User }) {
   
   const { data: permissions, isLoading } = useQuery({
     queryKey: ['userPermissions', user.id],
-    queryFn: () => getUserPermissions(user.id),
-    onSuccess: (data) => setLocalPermissions(data)
+    queryFn: () => getUserPermissions(user.id)
   });
 
   // Re-sync local state when data changes or user changes

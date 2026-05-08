@@ -20,7 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem(TOKEN_KEY);
     // If a token exists, hydrate a minimal user so PrivateRoute lets us through
-    return saved ? { id: 1, email: '', name: 'Loading...', createdAt: '' } : null;
+    return saved ? { id: 1, email: '', name: 'Loading...', createdAt: '', isAdmin: false } : null;
   });
   const [isLoading, setIsLoading] = useState(true);
   const queryClient = useQueryClient();
