@@ -548,11 +548,10 @@ export default function RegisterPage() {
   // Column widths state for custom resizing
   const [colWidths, setColWidths] = useState<Record<number, number>>({});
 
-  // ── Data ──
   // Combined query above handles data fetching for the register
   const errorRef = useRef<any>(null);
   useEffect(() => {
-    if (error) {
+    if (error && error !== errorRef.current) {
       errorRef.current = error;
       toast.error('Failed to load register data');
       addNotification({

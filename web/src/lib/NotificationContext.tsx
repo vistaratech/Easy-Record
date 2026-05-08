@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 
 export type NotificationType = 'warning' | 'error' | 'info' | 'success';
 
@@ -32,7 +32,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const addNotification = (notif: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
+  const addNotification = useCallback((notif: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
     const newNotif: AppNotification = {
       ...notif,
       id: Date.now().toString() + Math.random().toString(36).substring(7),
@@ -40,23 +40,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       isRead: false,
     };
     setNotifications(prev => [newNotif, ...prev]);
-  };
+  }, []);
 
-  const markAsRead = (id: string) => {
+  const markAsRead = useCallback((id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-  };
+  }, []);
 
-  const markAllAsRead = () => {
+  const markAllAsRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-  };
+  }, []);
 
-  const removeNotification = (id: string) => {
+  const removeNotification = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  }, []);
 
-  const clearAll = () => {
+  const clearAll = useCallback(() => {
     setNotifications([]);
-  };
+  }, []);
 
   return (
     <NotificationContext.Provider value={{
