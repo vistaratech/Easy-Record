@@ -114,6 +114,28 @@ const adminOnly = async (req, res, next) => {
   }
 };
 
+// Permission check helper
+async function checkRegisterPermission(userId, registerId, type = 'view') {
+  const { rows: regRows } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [registerId]);
+  if (!regRows.length) return false;
+  
+  const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+  const isAdmin = userRows.length > 0 && userRows[0].is_admin;
+  if (isAdmin) return true;
+
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [regRows[0].business_id, userId]);
+  if (bizCheck.length > 0) return true;
+
+  const { rows: permRows } = await pool.query('SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2', [userId, registerId]);
+  if (!permRows.length) return false;
+
+  const perms = permRows[0];
+  if (type === 'view') return perms.can_view;
+  if (type === 'edit') return perms.can_edit;
+  if (type === 'download') return perms.can_download;
+  return false;
+}
+
 // ── ADMIN ──
 app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
   try {
@@ -263,21 +285,25 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
     created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [regId]);
   if (!regRows.length) return res.status(404).json({ error: 'Register not found' });
   const reg = regRows[0];
+  // Access Control Logic
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [reg.businessId, req.user.id]);
-  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
-  const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [regId]);
-  reg.entries = entryRows;
-
-  // Fetch permissions for the current user
-  const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
+  const isOwner = bizCheck.length > 0;
   
-  // Admins or owners have full access by default
-  const isOwner = reg.businessId === req.user.id; // Simple check, might need better logic if businesses are shared
+  const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
+  const hasPermissions = permRows.length > 0;
+
   if (req.user.isAdmin || isOwner) {
     reg.permissions = { canView: true, canEdit: true, canDownload: true };
+  } else if (hasPermissions) {
+    reg.permissions = permRows[0];
+    if (!reg.permissions.canView) return res.status(403).json({ error: 'Access Denied: View permission required' });
   } else {
-    reg.permissions = permRows.length > 0 ? permRows[0] : { canView: false, canEdit: false, canDownload: false };
+    // No explicit permission and not owner/admin
+    return res.status(403).json({ error: 'Forbidden' });
   }
+
+  const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [regId]);
+  reg.entries = entryRows;
 
   if (!reg.pages || reg.pages.length === 0) reg.pages = [{ id: 1, name: 'Page 1', index: 0 }];
   if (!reg.columns) reg.columns = [];
@@ -422,9 +448,11 @@ app.post('/api/registers/:id/duplicate', authenticateToken, async (req, res) => 
 // ── ENTRIES ──
 app.post('/api/registers/:regId/entries', authenticateToken, async (req, res) => {
   const regId = req.params.regId;
+  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
+  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+
   const { cells, pageIndex, atIndex } = req.body;
   const id = genId();
-  // Get current max row_number for this page
   const { rows: maxRows } = await pool.query('SELECT COALESCE(MAX(row_number),0) AS max FROM entries WHERE register_id=$1 AND page_index=$2', [regId, pageIndex || 0]);
   const rowNumber = (maxRows[0]?.max || 0) + 1;
   await pool.query('INSERT INTO entries(id,register_id,row_number,cells,page_index) VALUES($1,$2,$3,$4,$5)', [id, regId, rowNumber, JSON.stringify(cells || {}), pageIndex || 0]);
@@ -433,13 +461,18 @@ app.post('/api/registers/:regId/entries', authenticateToken, async (req, res) =>
 });
 
 app.patch('/api/entries/:id', authenticateToken, async (req, res) => {
+  const { rows: entryData } = await pool.query('SELECT register_id FROM entries WHERE id=$1', [req.params.id]);
+  if (!entryData.length) return res.status(404).json({ error: 'Entry not found' });
+  const regId = entryData[0].register_id;
+
+  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
+  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+
   const { cells } = req.body;
-  // Merge cells
   const { rows: existing } = await pool.query('SELECT cells FROM entries WHERE id=$1', [req.params.id]);
-  if (!existing.length) return res.status(404).json({ error: 'Entry not found' });
   const merged = { ...existing[0].cells, ...cells };
   await pool.query('UPDATE entries SET cells=$1 WHERE id=$2', [JSON.stringify(merged), req.params.id]);
-  await pool.query('UPDATE registers SET updated_at=NOW() WHERE id=(SELECT register_id FROM entries WHERE id=$1)', [req.params.id]);
+  await pool.query('UPDATE registers SET updated_at=NOW() WHERE id=$1', [regId]);
   res.json({ id: Number(req.params.id), cells: merged });
 });
 
