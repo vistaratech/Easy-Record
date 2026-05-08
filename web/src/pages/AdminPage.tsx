@@ -18,13 +18,13 @@ export default function AdminPage() {
   
   // Stats and other data will be added here
 
-  const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useQuery({
+  const { data: users, isLoading: usersLoading, isError: usersError, refetch: refetchUsers } = useQuery({
     queryKey: ['adminUsers'],
     queryFn: listAllUsers
   });
 
   const filteredUsers = users?.filter(u => 
-    u.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (u.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -96,25 +96,40 @@ export default function AdminPage() {
                       <Loader2 size={32} className="animate-spin" />
                       <p>Fetching Users...</p>
                     </div>
-                  ) : filteredUsers?.map(user => (
-                    <div 
-                      key={user.id} 
-                      className={`admin-user-card ${selectedUser?.id === user.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedUser(user)}
-                    >
-                      <div className="user-card-main">
-                        <div className="user-icon-bg">
-                          {user.name?.[0].toUpperCase() || user.email[0].toUpperCase()}
-                        </div>
-                        <div className="user-card-info">
-                          <p className="user-card-name">{user.name || 'Unknown User'}</p>
-                          <p className="user-card-email">{user.email}</p>
-                        </div>
-                      </div>
-                      {user.isAdmin && <Shield size={14} className="admin-icon" />}
-                      <ChevronRight size={16} className="card-arrow" />
+                  ) : usersError ? (
+                    <div className="empty-panel">
+                      <Shield size={40} className="text-red-500" />
+                      <h4>Connection Failed</h4>
+                      <p>Could not fetch user list. Please check your admin permissions or network.</p>
+                      <button className="save-btn" onClick={() => refetchUsers()}>Retry</button>
                     </div>
-                  ))}
+                  ) : filteredUsers && filteredUsers.length > 0 ? (
+                    filteredUsers.map(user => (
+                      <div 
+                        key={user.id} 
+                        className={`admin-user-card ${selectedUser?.id === user.id ? 'selected' : ''}`}
+                        onClick={() => setSelectedUser(user)}
+                      >
+                        <div className="user-card-main">
+                          <div className="user-icon-bg">
+                            {user.name?.[0].toUpperCase() || user.email[0].toUpperCase()}
+                          </div>
+                          <div className="user-card-info">
+                            <p className="user-card-name">{user.name || 'Unknown User'}</p>
+                            <p className="user-card-email">{user.email}</p>
+                          </div>
+                        </div>
+                        {user.isAdmin && <Shield size={14} className="admin-icon" />}
+                        <ChevronRight size={16} className="card-arrow" />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-panel">
+                      <Users size={40} />
+                      <h4>No Users Found</h4>
+                      <p>No members match your current search criteria.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 

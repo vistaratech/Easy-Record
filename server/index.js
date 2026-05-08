@@ -120,8 +120,10 @@ app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
 app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
+    console.log(`Admin user list fetch: found ${rows.length} users`);
     res.json(rows);
   } catch (err) {
+    console.error('Admin user list error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
