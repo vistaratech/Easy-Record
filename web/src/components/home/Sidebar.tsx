@@ -1,5 +1,5 @@
 import { useCallback, memo, useState, startTransition, useDeferredValue, useMemo } from 'react';
-import { Menu, Search, Plus, FileText, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Menu, Search, Plus, FileText, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle, Shield } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '../../lib/auth';
@@ -61,7 +61,7 @@ export const Sidebar = memo(function Sidebar({
 
   const businessId = businesses?.[0]?.id;
   const deferredSearch = useDeferredValue(search);
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders', businessId],

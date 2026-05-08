@@ -3212,6 +3212,8 @@ export default function RegisterPage() {
   }, [visibleColumns, frozenColumns, colWidths, defaultColWidth]);
 
 
+  const permissions = register?.permissions || { canView: true, canEdit: true, canDownload: true };
+
   if (isLoading) return (
     <div className="content-area">
       <div className="book-loader-wrapper">
@@ -3224,7 +3226,25 @@ export default function RegisterPage() {
       </div>
     </div>
   );
+
   if (!register) return <div className="empty-state"><p>Register not found</p></div>;
+
+  if (!permissions.canView) {
+    return (
+      <div className="content-area">
+        <div className="empty-state">
+          <div style={{ color: 'var(--destructive)', marginBottom: '16px' }}>
+            <AlertCircle size={48} />
+          </div>
+          <h2>Access Denied</h2>
+          <p>You do not have permission to view this register.</p>
+          <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
+            Go Back Home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="content-area">
@@ -3239,7 +3259,14 @@ export default function RegisterPage() {
         <RegisterHeader 
           register={register} 
           setShareModal={setShareModal} 
-          handleOpenExport={() => setShowExportModal(true)}
+          handleOpenExport={() => {
+            if (!permissions.canDownload) {
+              toast.error('Download permission denied');
+              return;
+            }
+            setShowExportModal(true);
+          }}
+          permissions={permissions}
         />
       </div>
 
@@ -3252,11 +3279,16 @@ export default function RegisterPage() {
               key={page.id}
               className={`page-tab ${idx === currentPageIndex ? 'active' : ''}`}
               onClick={() => setCurrentPageIndex(idx)}
-              onDoubleClick={() => { setRenamePageId(page.id); setRenamePageValue(page.name); setRenamePageModal(true); }}
+              onDoubleClick={() => { 
+                if (!permissions.canEdit) return;
+                setRenamePageId(page.id); 
+                setRenamePageValue(page.name); 
+                setRenamePageModal(true); 
+              }}
             >
               <FileText size={11} style={{ flexShrink: 0 }} />
               {page.name}
-              {pages.length > 1 && (
+              {permissions.canEdit && pages.length > 1 && (
                 <span
                   className="page-tab-close"
                   title={`Delete ${page.name}`}
@@ -3272,17 +3304,21 @@ export default function RegisterPage() {
               )}
             </button>
           ))}
-          <button className="page-add-btn" onClick={() => addPageMutation.mutate()} title="Add Page" aria-label="Add Page">
-            <Plus size={14} />
-          </button>
+          {permissions.canEdit && (
+            <button className="page-add-btn" onClick={() => addPageMutation.mutate()} title="Add Page" aria-label="Add Page">
+              <Plus size={14} />
+            </button>
+          )}
 
           <div className="pab-divider" />
 
 
           {/* Add Record — opens form modal */}
-          <button className="pab-tab-action-btn primary" onClick={() => setShowAddRecordModal(true)}>
-            <Plus size={12} /> Add Record
-          </button>
+          {permissions.canEdit && (
+            <button className="pab-tab-action-btn primary" onClick={() => setShowAddRecordModal(true)}>
+              <Plus size={12} /> Add Record
+            </button>
+          )}
         </div>
 
         {/* Right: stats + search + filter + contextual */}
@@ -3311,6 +3347,7 @@ export default function RegisterPage() {
           redo={redo}
           undoStackCount={undoStack.current.length}
           redoStackCount={redoStack.current.length}
+          permissions={permissions}
         />
       </div>
 
@@ -3783,20 +3820,23 @@ export default function RegisterPage() {
                           <div className="row-detail-input-wrapper">
                             <input 
                               type="text"
-                              className={`row-detail-input cell-date ${detailErrors[colKey] ? 'invalid' : ''}`} 
+                              className={`row-detail-input cell-date ${detailErrors[colKey] ? 'invalid' : ''} ${!permissions.canEdit ? 'readonly' : ''}`} 
                               value={val}
                               placeholder="DD-MM-YYYY"
                               autoComplete="off"
+                              readOnly={!permissions.canEdit}
                               onChange={(e) => {
+                                if (!permissions.canEdit) return;
                                 setDetailEdits(prev => ({ ...prev, [colKey]: e.target.value }));
                                 if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
                               }}
                               onClick={(e) => {
+                                if (!permissions.canEdit) return;
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                 openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);
                               }}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
+                                if (e.key === 'Enter' && permissions.canEdit) {
                                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                   openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);
                                 } else {
@@ -3833,29 +3873,31 @@ export default function RegisterPage() {
                                 <div className="row-detail-image-actions">
                                   <button className="row-detail-img-btn" onClick={() => setPreviewImage({ url: val, entryId: detailViewEntry.id, colId: col.id.toString() })}>View Large</button>
                                   <button className="row-detail-img-btn" onClick={() => handleImageDownload(val)}>Download</button>
-                                  <button className="row-detail-img-btn danger" onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: '' }))}>Remove</button>
+                                  {permissions.canEdit && <button className="row-detail-img-btn danger" onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: '' }))}>Remove</button>}
                                 </div>
                               </div>
                             ) : (
-                              <label className="row-detail-image-upload">
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  hidden 
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      const reader = new FileReader();
-                                      reader.onload = (rev) => {
-                                        setDetailEdits(prev => ({ ...prev, [colKey]: rev.target?.result as string }));
-                                      };
-                                      reader.readAsDataURL(file);
-                                    }
-                                  }}
-                                />
-                                <ImageIcon size={16} />
-                                <span>Upload Image</span>
-                              </label>
+                              permissions.canEdit && (
+                                <label className="row-detail-image-upload">
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    hidden 
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (rev) => {
+                                          setDetailEdits(prev => ({ ...prev, [colKey]: rev.target?.result as string }));
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }
+                                    }}
+                                  />
+                                  <ImageIcon size={16} />
+                                  <span>Upload Image</span>
+                                </label>
+                              )
                             )}
                           </div>
                         ) : col.type === 'formula' ? (
@@ -3868,12 +3910,13 @@ export default function RegisterPage() {
                             }}
                             onKeyDown={(e) => handleDetailKeyDown(e, col.id)}
                             onClick={() => {
+                              if (!permissions.canEdit) return;
                               setActiveModalColId(col.id);
                               setNewColFormula(col.formula || '');
                               setChangeTypeValue(col.type);
                               setChangeTypeModal(true);
                             }}
-                            title="Click to edit formula"
+                            title={permissions.canEdit ? "Click to edit formula" : undefined}
                           >
                             {evaluateFormula(col.formula || '', { ...detailViewEntry, cells: { ...detailViewEntry.cells, ...detailEdits } }, columns)}
                           </div>
@@ -3885,18 +3928,20 @@ export default function RegisterPage() {
                         ) : (
                           <div className="row-detail-input-wrapper">
                             <input
-                              className={`row-detail-input ${detailErrors[colKey] ? 'invalid' : ''}`}
+                              className={`row-detail-input ${detailErrors[colKey] ? 'invalid' : ''} ${!permissions.canEdit ? 'readonly' : ''}`}
                               value={val}
+                              readOnly={!permissions.canEdit}
                               ref={(el) => {
                                 if (el) detailInputRefs.current.set(col.id, el);
                                 else detailInputRefs.current.delete(col.id);
                               }}
                               onKeyDown={(e) => handleDetailKeyDown(e, col.id)}
                               onChange={e => {
+                                if (!permissions.canEdit) return;
                                 setDetailEdits(prev => ({ ...prev, [colKey]: e.target.value }));
                                 if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
                               }}
-                              placeholder={`Enter ${col.name}…`}
+                              placeholder={permissions.canEdit ? `Enter ${col.name}…` : '–'}
                               type={col.type === 'email' ? 'email' : col.type === 'phone' ? 'tel' : 'text'}
                               inputMode={col.type === 'number' || col.type === 'currency' ? 'decimal' : undefined}
                             />
@@ -3917,7 +3962,8 @@ export default function RegisterPage() {
 
             <div className="row-detail-footer">
               <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); }}>Cancel</button>
-              <button 
+              {permissions.canEdit && (
+                <button 
                 className="row-detail-btn-save" 
                 disabled={isSaving}
                 onClick={async () => {
@@ -4016,9 +4062,10 @@ export default function RegisterPage() {
                   setDetailErrors({});
                 }}
               >
-                Save Changes
-              </button>
-            </div>
+                    Save Changes
+                  </button>
+                )}
+              </div>
           </div>
         </div>
       )}

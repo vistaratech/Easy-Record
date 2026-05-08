@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) NOT NULL UNIQUE,
   name VARCHAR(255),
   password VARCHAR(255) NOT NULL,
+  is_admin BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -96,6 +97,16 @@ CREATE TABLE IF NOT EXISTS backups (
 );
 
 CREATE INDEX IF NOT EXISTS idx_backups_business ON backups(business_id);
+
+-- User permissions for granular access
+CREATE TABLE IF NOT EXISTS user_permissions (
+  user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+  register_id BIGINT REFERENCES registers(id) ON DELETE CASCADE,
+  can_view BOOLEAN DEFAULT TRUE,
+  can_edit BOOLEAN DEFAULT FALSE,
+  can_download BOOLEAN DEFAULT FALSE,
+  PRIMARY KEY (user_id, register_id)
+);
 
 -- Insert a default test user (matches the mock auth in the frontend)
 -- Password is 'password' hashed with bcrypt

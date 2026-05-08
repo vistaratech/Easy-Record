@@ -40,8 +40,8 @@ app.post('/api/auth/signup', async (req, res) => {
     await pool.query('INSERT INTO businesses(id, name, owner_id) VALUES($1, $2, $3)', [businessId, 'My Business', id]);
     await logAction(pool, businessId, 'Create Business', 'Initial default business created', { userName: name });
 
-    const token = jwt.sign({ id, email, name }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id, email, name, createdAt: new Date().toISOString() } });
+    const token = jwt.sign({ id, email, name, isAdmin: false }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user: { id, email, name, isAdmin: false, createdAt: new Date().toISOString() } });
   } catch (err) {
     console.error('Signup error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -66,8 +66,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id: user.id, email: user.email, name: user.name, createdAt: user.created_at } });
+    const token = jwt.sign({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, createdAt: user.created_at } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -93,9 +93,85 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = rows[0];
-    res.json({ id: user.id, email: user.email, name: user.name, createdAt: user.created_at });
+    res.json({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, createdAt: user.created_at });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Admin Middleware
+const adminOnly = (req, res, next) => {
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  }
+  next();
+};
+
+// ── ADMIN ──
+app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT COUNT(*) as "userCount" FROM users');
+    res.json({ userCount: parseInt(rows[0].userCount, 10) });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Get all registers and join with permissions for this user
+    const { rows } = await pool.query(`
+      SELECT 
+        r.id AS "registerId", 
+        r.name AS "registerName",
+        COALESCE(p.can_view, FALSE) AS "canView",
+        COALESCE(p.can_edit, FALSE) AS "canEdit",
+        COALESCE(p.can_download, FALSE) AS "canDownload"
+      FROM registers r
+      LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+      WHERE r.deleted_at IS NULL
+      ORDER BY r.name
+    `, [userId]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/admin/permissions', authenticateToken, adminOnly, async (req, res) => {
+  const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canEdit, canDownload }, ...]
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const p of permissions) {
+      await client.query(`
+        INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (user_id, register_id) DO UPDATE SET
+          can_view = EXCLUDED.can_view,
+          can_edit = EXCLUDED.can_edit,
+          can_download = EXCLUDED.can_download
+      `, [userId, p.registerId, !!p.canView, !!p.canEdit, !!p.canDownload]);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Permission update error:', err);
+    res.status(500).json({ error: 'Failed to update permissions' });
+  } finally {
+    client.release();
   }
 });
 
@@ -178,6 +254,18 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
   if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
   const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [regId]);
   reg.entries = entryRows;
+
+  // Fetch permissions for the current user
+  const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
+  
+  // Admins or owners have full access by default
+  const isOwner = reg.businessId === req.user.id; // Simple check, might need better logic if businesses are shared
+  if (req.user.isAdmin || isOwner) {
+    reg.permissions = { canView: true, canEdit: true, canDownload: true };
+  } else {
+    reg.permissions = permRows.length > 0 ? permRows[0] : { canView: false, canEdit: false, canDownload: false };
+  }
+
   if (!reg.pages || reg.pages.length === 0) reg.pages = [{ id: 1, name: 'Page 1', index: 0 }];
   if (!reg.columns) reg.columns = [];
   res.json(reg);

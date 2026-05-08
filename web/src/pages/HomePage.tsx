@@ -20,6 +20,7 @@ import HistoryPage from './HistoryPage';
 import RecycleBinPage from './RecycleBinPage';
 import ProfilePage from './ProfilePage';
 import BackupPage from './BackupPage';
+import AdminPage from './AdminPage';
 
 const RegisterPageWrapper = memo(() => {
   const { id } = useParams();
@@ -349,6 +350,7 @@ export default function HomePage() {
         <Route path="recycle-bin" element={<RecycleBinPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="backup" element={<BackupPage />} />
+        <Route path="admin" element={<AdminPage />} />
       </Routes>
 
       {/* ── Register Context Menu ── */}

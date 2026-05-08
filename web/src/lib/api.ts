@@ -20,6 +20,7 @@ export interface User {
   id: number;
   email: string;
   name: string | null;
+  isAdmin: boolean;
   createdAt: string;
 }
 
@@ -119,7 +120,7 @@ export interface Page { id: number; name: string; index: number; }
 export interface RegisterDetail extends RegisterSummary {
   columns: Column[]; entries: Entry[]; pages: Page[];
   shareLink?: string; sharedWith?: SharedUser[];
-  deletedItems?: DeletedItem[];
+  deletedItems?: DeletedItem[]; permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export interface SharedUser {
@@ -1979,4 +1980,40 @@ export async function isBackupDue(businessId: number): Promise<boolean> {
 export function clearAllCaches(): void {
   registerCache.clear();
   registerMutationQueues.clear();
+}
+
+// ==================== ADMIN ====================
+export interface AdminStats {
+  userCount: number;
+}
+
+export interface UserPermission {
+  registerId: number;
+  registerName: string;
+  canView: boolean;
+  canEdit: boolean;
+  canDownload: boolean;
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  const res = await fetchApi(`${API}/admin/stats`);
+  return res.json();
+}
+
+export async function listAllUsers(): Promise<User[]> {
+  const res = await fetchApi(`${API}/admin/users`);
+  return res.json();
+}
+
+export async function getUserPermissions(userId: number): Promise<UserPermission[]> {
+  const res = await fetchApi(`${API}/admin/users/${userId}/permissions`);
+  return res.json();
+}
+
+export async function updateUserPermissions(userId: number, permissions: Partial<UserPermission>[]): Promise<void> {
+  await fetchApi(`${API}/admin/permissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, permissions }),
+  });
 }

@@ -29,6 +29,7 @@ interface RegisterToolbarProps {
   redo?: () => void;
   undoStackCount?: number;
   redoStackCount?: number;
+  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export const RegisterToolbar = memo(function RegisterToolbar({
@@ -36,8 +37,10 @@ export const RegisterToolbar = memo(function RegisterToolbar({
   hiddenColumns,
   selectedRows, rowCount, columns, bulkDeleteMutation,
   setManageColsMenu,
-  undo, redo, undoStackCount, redoStackCount
+  undo, redo, undoStackCount, redoStackCount,
+  permissions
 }: RegisterToolbarProps) {
+  const canEdit = permissions?.canEdit ?? true;
 
   return (
     <div className="pages-actions-right">
@@ -88,7 +91,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       <div className="pab-divider" />
 
       {/* Undo */}
-      {undo && (
+      {canEdit && undo && (
         <button
           className={`pab-icon-btn${undoStackCount && undoStackCount > 0 ? '' : ' disabled'}`}
           title={`Undo${undoStackCount && undoStackCount > 0 ? ` (${undoStackCount})` : ''} — Ctrl+Z`}
@@ -102,7 +105,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       )}
 
       {/* Redo */}
-      {redo && (
+      {canEdit && redo && (
         <button
           className={`pab-icon-btn${redoStackCount && redoStackCount > 0 ? '' : ' disabled'}`}
           title={`Redo${redoStackCount && redoStackCount > 0 ? ` (${redoStackCount})` : ''} — Ctrl+Y`}
@@ -127,7 +130,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       </button>
 
       {/* Bulk delete */}
-      {selectedRows.size > 0 && (
+      {canEdit && selectedRows.size > 0 && (
         <button className="pab-icon-btn danger" title={`Delete ${selectedRows.size} rows`}
           onClick={() => { if (confirm(`Delete ${selectedRows.size} rows?`)) bulkDeleteMutation.mutate(); }}>
           <Trash2 size={13} />

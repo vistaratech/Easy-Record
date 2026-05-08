@@ -13,12 +13,16 @@ interface RegisterHeaderProps {
   register: any;
   setShareModal: (open: boolean) => void;
   handleOpenExport: () => void;
+  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
-export function RegisterHeader({ register, setShareModal, handleOpenExport }: RegisterHeaderProps) {
+export function RegisterHeader({ register, setShareModal, handleOpenExport, permissions }: RegisterHeaderProps) {
   const [saveTemplateModal, setSaveTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const templateInputRef = useRef<HTMLInputElement>(null);
+
+  const canEdit = permissions?.canEdit ?? true;
+  const canDownload = permissions?.canDownload ?? true;
 
   // Focus template name input when modal opens
   useEffect(() => {
@@ -66,17 +70,27 @@ export function RegisterHeader({ register, setShareModal, handleOpenExport }: Re
   return (
     <div className="register-header-actions">
 
-      <button className="register-header-btn" onClick={() => setShareModal(true)}>
-        <Share2 size={14} /> Share
-      </button>
+      {canEdit && (
+        <button className="register-header-btn" onClick={() => setShareModal(true)}>
+          <Share2 size={14} /> Share
+        </button>
+      )}
+      
       <div className="export-dropdown-wrap">
-        <button className="register-header-btn" onClick={handleOpenExport}>
+        <button 
+          className={`register-header-btn ${!canDownload ? 'disabled' : ''}`} 
+          onClick={canDownload ? handleOpenExport : () => toast.error('Download permission denied')}
+          title={!canDownload ? 'You do not have permission to download' : ''}
+        >
           <Download size={14} /> Download Options
         </button>
       </div>
-      <button className="register-header-btn outline" onClick={() => { setTemplateName(register?.name || ''); setSaveTemplateModal(true); }}>
-        <Bookmark size={14} /> Save Template
-      </button>
+
+      {canEdit && (
+        <button className="register-header-btn outline" onClick={() => { setTemplateName(register?.name || ''); setSaveTemplateModal(true); }}>
+          <Bookmark size={14} /> Save Template
+        </button>
+      )}
 
       {/* Save Template Modal */}
       {saveTemplateModal && (
