@@ -3214,12 +3214,6 @@ export default function RegisterPage() {
 
   const permissions = register?.permissions || { canView: true, canEdit: true, canDownload: true };
 
-  useEffect(() => {
-    if (register && !permissions.canView) {
-      toast.error('Admin access required', { id: `view-denied-${registerId}` });
-    }
-  }, [register, permissions.canView, registerId]);
-
   if (isLoading) return (
     <div className="content-area">
       <div className="book-loader-wrapper">
@@ -3242,8 +3236,8 @@ export default function RegisterPage() {
           <div style={{ color: 'var(--destructive)', marginBottom: '16px' }}>
             <AlertCircle size={48} />
           </div>
-          <h2>Admin access required</h2>
-          <p>You do not have permission to view this register. Please contact your administrator.</p>
+          <h2>Access Denied</h2>
+          <p>You need admin permission to view this register.</p>
           <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
             Go Back Home
           </button>
