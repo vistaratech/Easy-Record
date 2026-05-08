@@ -138,7 +138,7 @@ app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
 app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { userId } = req.params;
-    // Get ALL registers across the entire system and join with permissions for this user
+    // Get registers that belong to a business owned by the selected userId
     const { rows } = await pool.query(`
       SELECT 
         r.id AS "registerId", 
@@ -150,8 +150,8 @@ app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, as
       FROM registers r
       INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL
-      ORDER BY b.name, r.name
+      WHERE r.deleted_at IS NULL AND b.owner_id = $1
+      ORDER BY r.name
     `, [userId]);
     console.log(`Permissions fetch for user ${userId}: found ${rows.length} registers`);
     res.json(rows);
