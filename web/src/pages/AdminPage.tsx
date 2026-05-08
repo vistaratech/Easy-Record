@@ -7,7 +7,7 @@ import {
 } from '../lib/api';
 import { 
   Users, Shield, Eye, Pencil, Download, ChevronRight, Search, 
-  Loader2, Check, ArrowLeft, RefreshCw, LayoutDashboard
+  Loader2, Check, ArrowLeft, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../lib/auth';
@@ -17,8 +17,6 @@ export default function AdminPage() {
   const { user: currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  
-  const [activeTab, setActiveTab] = useState<'users' | 'overview'>('overview');
   
   const { data: rawUsers, isLoading: usersLoading, isError: usersError, refetch: refetchUsers } = useQuery({
     queryKey: ['adminUsers'],
@@ -44,17 +42,7 @@ export default function AdminPage() {
         </div>
         
         <nav className="admin-nav">
-          <button 
-            className={`admin-nav-item ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-          >
-            <LayoutDashboard size={18} />
-            <span>Overview</span>
-          </button>
-          <button 
-            className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`}
-            onClick={() => setActiveTab('users')}
-          >
+          <button className="admin-nav-item active">
             <Users size={18} />
             <span>Users</span>
           </button>
@@ -91,32 +79,7 @@ export default function AdminPage() {
         </header>
 
         <div className="admin-view-content">
-          {activeTab === 'overview' ? (
-            <div className="admin-dashboard">
-              <div className="stat-card glass-panel">
-                <div className="stat-icon-bg users">
-                  <Users size={24} />
-                </div>
-                <div className="stat-details">
-                  <span className="stat-label">Total Registered Users</span>
-                  <h2 className="stat-value">{usersLoading ? '...' : users.length}</h2>
-                  <p className="stat-trend positive">System Active</p>
-                </div>
-              </div>
-              
-              <div className="stat-card glass-panel">
-                <div className="stat-icon-bg shield">
-                  <Shield size={24} />
-                </div>
-                <div className="stat-details">
-                  <span className="stat-label">System Security</span>
-                  <h2 className="stat-value">Active</h2>
-                  <p className="stat-trend">Standard Protected</p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="admin-users-grid">
+          <div className="admin-users-grid">
               {/* User List Panel */}
               <div className="glass-panel user-list-panel">
                 <div className="panel-header">
@@ -193,7 +156,6 @@ export default function AdminPage() {
                 )}
               </div>
             </div>
-          )}
         </div>
       </main>
     </div>
@@ -252,7 +214,7 @@ function PermissionsManager({ user }: { user: User }) {
           </div>
           <div>
             <h3>{user.name || 'User'}'s Access Control</h3>
-            <p>Managing access for {localPermissions.length} registers</p>
+            <p>Manage permissions for {localPermissions.length} registers</p>
           </div>
         </div>
         <div className="manager-actions">
