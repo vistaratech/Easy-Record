@@ -21,6 +21,8 @@ export interface User {
   email: string;
   name: string | null;
   isAdmin: boolean;
+  canCreateRegisters?: boolean;
+  canCreateTemplates?: boolean;
   createdAt: string;
 }
 
@@ -2018,10 +2020,14 @@ export async function getUserPermissions(userId: number): Promise<UserPermission
   return res.json();
 }
 
-export async function updateUserPermissions(userId: number, permissions: Partial<UserPermission>[]): Promise<void> {
+export async function updateUserPermissions(
+  userId: number, 
+  permissions: Partial<UserPermission>[], 
+  globalPermissions?: { canCreateRegisters: boolean, canCreateTemplates: boolean }
+): Promise<void> {
   await fetchApi(`${API}/admin/permissions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, permissions }),
+    body: JSON.stringify({ userId, permissions, globalPermissions }),
   });
 }

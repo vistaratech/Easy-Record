@@ -93,7 +93,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = rows[0];
-    res.json({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, createdAt: user.created_at });
+    res.json({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, canCreateRegisters: user.can_create_registers, canCreateTemplates: user.can_create_templates, createdAt: user.created_at });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -159,7 +159,7 @@ app.get('/api/admin/stats', async (req, res) => {
 
 app.get('/api/admin/users', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
+    const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", can_create_registers AS "canCreateRegisters", can_create_templates AS "canCreateTemplates", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
     console.log(`Admin user list fetch: found ${rows.length} users`);
     res.json(rows);
   } catch (err) {
@@ -199,7 +199,13 @@ app.post('/api/admin/permissions', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const p of permissions) {
+    if (req.body.globalPermissions) {
+      const { canCreateRegisters, canCreateTemplates } = req.body.globalPermissions;
+      await client.query(`
+        UPDATE users SET can_create_registers = $1, can_create_templates = $2 WHERE id = $3
+      `, [!!canCreateRegisters, !!canCreateTemplates, userId]);
+    }
+    for (const p of (permissions || [])) {
       await client.query(`
         INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download)
         VALUES ($1, $2, $3, $4, $5)
@@ -351,8 +357,15 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/registers', authenticateToken, async (req, res) => {
   const { businessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
+  const { rows: userCheck } = await pool.query('SELECT is_admin, can_create_registers FROM users WHERE id = $1', [req.user.id]);
+  const user = userCheck[0];
+  const isAdmin = user?.is_admin;
+  const canCreate = user?.can_create_registers;
+
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
-  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+  const isOwner = bizCheck.length > 0;
+
+  if (!isAdmin && !isOwner && !canCreate) return res.status(403).json({ error: 'Permission denied: Create access required' });
   const id = genId();
   const cols = (columns || []).map((c, i) => ({ id: id + i + 1, registerId: id, name: c.name, type: c.type, position: i, dropdownOptions: c.dropdownOptions, formula: c.formula, width: c.width, summary: c.summary }));
   const pages = [{ id: 1, name: 'Page 1', index: 0 }];

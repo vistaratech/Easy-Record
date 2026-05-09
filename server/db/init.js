@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255),
   password VARCHAR(255) NOT NULL,
   is_admin BOOLEAN DEFAULT FALSE,
+  can_create_registers BOOLEAN DEFAULT FALSE,
+  can_create_templates BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

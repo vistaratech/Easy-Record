@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../lib/auth';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { listBusinesses, createBusiness, createRegister, type RegisterSummary } from '../lib/api';
@@ -9,7 +10,6 @@ import {
   Utensils, Dumbbell, Building2, User, ShieldCheck, Leaf, Plane,
   Phone, Mail, Globe, Star, CheckSquare, Image, Plus
 } from 'lucide-react';
-import { useEffect } from 'react';
 
 import { CategoryCard } from '../components/templates/CategoryCard';
 import { TemplateModal } from '../components/templates/TemplateModal';
@@ -38,8 +38,15 @@ function getColTypeIcon(type: string) {
 }
 
 export default function TemplatesPage() {
-  const { categoryId } = useParams();
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && !user.isAdmin && !user.canCreateTemplates) {
+      navigate('/');
+    }
+  }, [user, navigate]);
+  const { categoryId } = useParams();
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryId || null);
   const [creatingTemplate, setCreatingTemplate] = useState<string | null>(null);

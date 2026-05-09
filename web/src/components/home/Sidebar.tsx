@@ -61,7 +61,8 @@ export const Sidebar = memo(function Sidebar({
 
   const businessId = businesses?.[0]?.id;
   const deferredSearch = useDeferredValue(search);
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const canCreate = user?.isAdmin || user?.canCreateRegisters;
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders', businessId],
@@ -338,7 +339,8 @@ export const Sidebar = memo(function Sidebar({
           </div>
         </div>
         {/* Sidebar Add Button */}
-        <div className="sidebar-add-section" style={{ padding: '12px 12px 8px', position: 'relative' }}>
+        {canCreate && (
+          <div className="sidebar-add-section" style={{ padding: '12px 12px 8px', position: 'relative' }}>
           <button 
             className="sidebar-add-btn"
             onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
@@ -390,6 +392,7 @@ export const Sidebar = memo(function Sidebar({
             </>
           )}
         </div>
+        )}
 
         {/* Global Search Bar */}
         {!isCollapsed && (
