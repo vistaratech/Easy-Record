@@ -101,6 +101,35 @@ export default function AdminDashboard() {
     }
   }
 
+  async function toggleAdminStatus() {
+    if (!selectedUserId || !selectedUser) return;
+
+    const updatedUser = { ...selectedUser };
+    updatedUser.isAdmin = !updatedUser.isAdmin;
+    
+    // If becoming admin, also enable global edit for consistency (though isAdmin bypasses anyway)
+    if (updatedUser.isAdmin) {
+      updatedUser.canEdit = true;
+    }
+
+    // Optimistic update
+    setUsers(prev => prev.map(u => u.id === selectedUserId ? updatedUser : u));
+
+    try {
+      setSaving(true);
+      await updateUserPermissions(selectedUserId, [], {
+        isAdmin: updatedUser.isAdmin,
+        canEdit: updatedUser.canEdit
+      });
+    } catch (err) {
+      // Rollback
+      setUsers(prev => prev.map(u => u.id === selectedUserId ? selectedUser : u));
+      alert('Failed to update admin status');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function toggleGlobalEdit() {
     if (!selectedUserId || !selectedUser) return;
 
@@ -272,6 +301,21 @@ export default function AdminDashboard() {
                       type="checkbox" 
                       checked={selectedUser.canEdit} 
                       onChange={toggleGlobalEdit}
+                    />
+                    <span style={s.slider}></span>
+                  </label>
+                </div>
+
+                <div style={s.globalCard}>
+                  <div style={s.globalInfo}>
+                    <div style={s.globalLabel}>Admin Status</div>
+                    <div style={s.globalDesc}>Grants full administrative privileges across the entire platform.</div>
+                  </div>
+                  <label style={s.switch}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedUser.isAdmin} 
+                      onChange={toggleAdminStatus}
                     />
                     <span style={s.slider}></span>
                   </label>

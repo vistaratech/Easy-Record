@@ -202,12 +202,20 @@ app.post('/api/admin/permissions', async (req, res) => {
   try {
     await client.query('BEGIN');
     if (req.body.globalPermissions) {
-      const { canEdit, canCreateRegisters, canCreateTemplates } = req.body.globalPermissions;
-      // If canEdit is provided, we use it for creation perms as well based on the new logic
-      const val = !!canEdit;
-      await client.query(`
-        UPDATE users SET can_edit = $1, can_create_registers = $1, can_create_templates = $1 WHERE id = $2
-      `, [val, userId]);
+      const { canEdit, isAdmin } = req.body.globalPermissions;
+      
+      if (canEdit !== undefined) {
+        const val = !!canEdit;
+        await client.query(`
+          UPDATE users SET can_edit = $1, can_create_registers = $1, can_create_templates = $1 WHERE id = $2
+        `, [val, userId]);
+      }
+      
+      if (isAdmin !== undefined) {
+        await client.query(`
+          UPDATE users SET is_admin = $1 WHERE id = $2
+        `, [!!isAdmin, userId]);
+      }
     }
     for (const p of (permissions || [])) {
       await client.query(`

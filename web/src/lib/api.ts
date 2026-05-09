@@ -2024,7 +2024,7 @@ export async function getUserPermissions(userId: number): Promise<UserPermission
 export async function updateUserPermissions(
   userId: number, 
   permissions: Partial<UserPermission>[], 
-  globalPermissions?: { canEdit?: boolean, canCreateRegisters?: boolean, canCreateTemplates?: boolean }
+  globalPermissions?: { isAdmin?: boolean, canEdit?: boolean, canCreateRegisters?: boolean, canCreateTemplates?: boolean }
 ): Promise<void> {
   await fetchApi(`${API}/admin/permissions`, {
     method: 'POST',
