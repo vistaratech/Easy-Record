@@ -130,6 +130,11 @@ async function checkRegisterPermission(userId, registerId, type = 'view') {
   if (!permRows.length) return false;
 
   const perms = permRows[0];
+  
+  // Strict Enforcement: If a user cannot view a register, they intrinsically cannot edit or download it.
+  // This prevents scenarios where admin toggled Edit=On but View=Off, preventing any API bypass.
+  if (!perms.can_view) return false;
+
   if (type === 'view') return perms.can_view;
   if (type === 'edit') return perms.can_edit;
   if (type === 'download') return perms.can_download;
@@ -643,6 +648,12 @@ app.post('/api/backups', authenticateToken, async (req, res) => {
 });
 
 app.delete('/api/backups/:id', authenticateToken, async (req, res) => {
+  const { rows } = await pool.query('SELECT business_id FROM backups WHERE id=$1', [req.params.id]);
+  if (!rows.length) return res.status(404).json({ error: 'Backup not found' });
+  
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [rows[0].business_id, req.user.id]);
+  if (bizCheck.length === 0 && !req.user.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
   await pool.query('DELETE FROM backups WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
@@ -651,8 +662,12 @@ app.post('/api/backups/:id/restore', authenticateToken, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM backups WHERE id=$1', [req.params.id]);
   if (!rows.length) return res.status(404).json({ error: 'Backup not found' });
   const backup = rows[0];
-  const data = backup.data;
   const businessId = backup.business_id;
+
+  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+  if (bizCheck.length === 0 && !req.user.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+  const data = backup.data;
   // Delete existing data
   await pool.query('DELETE FROM entries WHERE register_id IN (SELECT id FROM registers WHERE business_id=$1)', [businessId]);
   await pool.query('DELETE FROM registers WHERE business_id=$1', [businessId]);

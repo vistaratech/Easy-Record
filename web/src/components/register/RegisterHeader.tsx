@@ -70,11 +70,7 @@ export function RegisterHeader({ register, setShareModal, handleOpenExport, perm
   return (
     <div className="register-header-actions">
 
-      {canEdit && (
-        <button className="register-header-btn" onClick={() => setShareModal(true)}>
-          <Share2 size={14} /> Share
-        </button>
-      )}
+      {/* Share removed - centralized in Admin Panel */}
       
       <div className="export-dropdown-wrap">
         <button 

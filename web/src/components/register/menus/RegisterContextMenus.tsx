@@ -49,6 +49,7 @@ interface RegisterContextMenusProps {
   // Manage Columns Dropdown
   manageColsMenu: { rect: DOMRect } | null;
   setManageColsMenu: (v: { rect: DOMRect } | null) => void;
+  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export function RegisterContextMenus(props: RegisterContextMenusProps) {
@@ -62,8 +63,12 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
     rowMenuId, setRowMenuId, duplicateEntryMutation, deleteEntryMutation, insertEntryMutation, localEntries,
     handleRowDownloadPDF, handleRowDownloadExcel, handleRowShareText,
     calcTypes, updateCalcType,
-    manageColsMenu, setManageColsMenu
+    manageColsMenu, setManageColsMenu,
+    permissions
   } = props;
+
+  const canEdit = permissions?.canEdit ?? true;
+  const canDownload = permissions?.canDownload ?? true;
 
   return (
     <>
@@ -99,97 +104,109 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
               <SortDesc size={16} /> Sort Z → A
             </button>
 
-            <div className="context-divider" />
-            <div className="context-section-label">Edit</div>
-            <button className="context-item" onClick={() => {
-              setRenameColValue(columns.find((c) => c.id === colMenuId)?.name || '');
-              setActiveModalColId(colMenuId);
-              setRenameColModal(true); setColMenuId(null);
-            }}>
-              <Pencil size={16} /> Rename Column
-            </button>
-            <button className="context-item" onClick={() => {
-              const col = columns.find((c) => c.id === colMenuId);
-              setChangeTypeValue(col?.type || 'text');
-              setNewColName(col?.name || '');
-              setNewColFormula(col?.formula || '');
-              setNewColDropdownOpts(col?.dropdownOptions?.join(', ') || '');
-              setActiveModalColId(colMenuId);
-              setChangeTypeModal(true); setColMenuId(null);
-            }}>
-              <ArrowLeftRight size={16} /> Change Column Type
-            </button>
-            <button className="context-item" onClick={() => {
-              setActiveModalColId(colMenuId);
-              setLinkColumnModal(true);
-              setColMenuId(null);
-            }}>
-              <LinkIcon size={16} /> Link
-            </button>
-            {columns.find((c) => c.id === colMenuId)?.type === 'dropdown' && (
-              <button className="context-item" onClick={() => {
-                const col = columns.find((c) => c.id === colMenuId);
-                setDropdownConfigOptions(col?.dropdownOptions?.join(', ') || '');
-                setActiveModalColId(colMenuId);
-                setDropdownConfigModal(true); setColMenuId(null);
-              }}>
-                <ChevronDown size={16} /> Edit Dropdown Options
-              </button>
+            {canEdit && (
+              <>
+                <div className="context-divider" />
+                <div className="context-section-label">Edit</div>
+                <button className="context-item" onClick={() => {
+                  setRenameColValue(columns.find((c) => c.id === colMenuId)?.name || '');
+                  setActiveModalColId(colMenuId);
+                  setRenameColModal(true); setColMenuId(null);
+                }}>
+                  <Pencil size={16} /> Rename Column
+                </button>
+                <button className="context-item" onClick={() => {
+                  const col = columns.find((c) => c.id === colMenuId);
+                  setChangeTypeValue(col?.type || 'text');
+                  setNewColName(col?.name || '');
+                  setNewColFormula(col?.formula || '');
+                  setNewColDropdownOpts(col?.dropdownOptions?.join(', ') || '');
+                  setActiveModalColId(colMenuId);
+                  setChangeTypeModal(true); setColMenuId(null);
+                }}>
+                  <ArrowLeftRight size={16} /> Change Column Type
+                </button>
+                <button className="context-item" onClick={() => {
+                  setActiveModalColId(colMenuId);
+                  setLinkColumnModal(true);
+                  setColMenuId(null);
+                }}>
+                  <LinkIcon size={16} /> Link
+                </button>
+                {columns.find((c) => c.id === colMenuId)?.type === 'dropdown' && (
+                  <button className="context-item" onClick={() => {
+                    const col = columns.find((c) => c.id === colMenuId);
+                    setDropdownConfigOptions(col?.dropdownOptions?.join(', ') || '');
+                    setActiveModalColId(colMenuId);
+                    setDropdownConfigModal(true); setColMenuId(null);
+                  }}>
+                    <ChevronDown size={16} /> Edit Dropdown Options
+                  </button>
+                )}
+              </>
             )}
 
-            <div className="context-divider" />
-            <div className="context-section-label">Insert & Copy</div>
-            <button className="context-item" onClick={() => duplicateColumnMutation.mutate(colMenuId)}>
-              <Copy size={16} /> Duplicate Column
-            </button>
-            <button className="context-item" onClick={() => {
-              setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
-              setActiveModalColId(colMenuId);
-              setInsertColModal('left'); setColMenuId(null);
-            }}>
-              <ArrowLeft size={16} /> Insert Column Left
-            </button>
-            <button className="context-item" onClick={() => {
-              setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
-              setActiveModalColId(colMenuId);
-              setInsertColModal('right'); setColMenuId(null);
-            }}>
-              <ArrowRight size={16} /> Insert Column Right
-            </button>
+            {canEdit && (
+              <>
+                <div className="context-divider" />
+                <div className="context-section-label">Insert & Copy</div>
+                <button className="context-item" onClick={() => duplicateColumnMutation.mutate(colMenuId)}>
+                  <Copy size={16} /> Duplicate Column
+                </button>
+                <button className="context-item" onClick={() => {
+                  setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
+                  setActiveModalColId(colMenuId);
+                  setInsertColModal('left'); setColMenuId(null);
+                }}>
+                  <ArrowLeft size={16} /> Insert Column Left
+                </button>
+                <button className="context-item" onClick={() => {
+                  setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
+                  setActiveModalColId(colMenuId);
+                  setInsertColModal('right'); setColMenuId(null);
+                }}>
+                  <ArrowRight size={16} /> Insert Column Right
+                </button>
+              </>
+            )}
 
-            <div className="context-divider" />
-            <div className="context-section-label">Arrange</div>
-            <button className="context-item"
-              disabled={columns.findIndex((c) => c.id === colMenuId) === 0}
-              onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'left' })}
-            >
-              <ChevronsLeftRight size={16} /> Move Left
-            </button>
-            <button className="context-item"
-              disabled={columns.findIndex((c) => c.id === colMenuId) === columns.length - 1}
-              onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'right' })}
-            >
-              <ChevronsLeftRight size={16} /> Move Right
-            </button>
-            <button className="context-item" onClick={() => {
-              const newFrozen = new Set(frozenColumns);
-              const isFrozen = newFrozen.has(colMenuId);
-              if (isFrozen) newFrozen.delete(colMenuId); else newFrozen.add(colMenuId);
-              setFrozenColumns(newFrozen);
-              freezeColumn(registerId, colMenuId, !isFrozen);
-              setColMenuId(null);
-            }}>
-              <Pin size={16} /> {frozenColumns.has(colMenuId) ? 'Unfreeze Column' : 'Freeze / Pin Column'}
-            </button>
-            <button className="context-item" onClick={() => {
-              const newHidden = new Set(hiddenColumns);
-              newHidden.add(colMenuId);
-              setHiddenColumns(newHidden);
-              hideColumn(registerId, colMenuId, true);
-              setColMenuId(null);
-            }}>
-              <EyeOff size={16} /> Hide Column
-            </button>
+            {canEdit && (
+              <>
+                <div className="context-divider" />
+                <div className="context-section-label">Arrange</div>
+                <button className="context-item"
+                  disabled={columns.findIndex((c) => c.id === colMenuId) === 0}
+                  onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'left' })}
+                >
+                  <ChevronsLeftRight size={16} /> Move Left
+                </button>
+                <button className="context-item"
+                  disabled={columns.findIndex((c) => c.id === colMenuId) === columns.length - 1}
+                  onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'right' })}
+                >
+                  <ChevronsLeftRight size={16} /> Move Right
+                </button>
+                <button className="context-item" onClick={() => {
+                  const newFrozen = new Set(frozenColumns);
+                  const isFrozen = newFrozen.has(colMenuId);
+                  if (isFrozen) newFrozen.delete(colMenuId); else newFrozen.add(colMenuId);
+                  setFrozenColumns(newFrozen);
+                  freezeColumn(registerId, colMenuId, !isFrozen);
+                  setColMenuId(null);
+                }}>
+                  <Pin size={16} /> {frozenColumns.has(colMenuId) ? 'Unfreeze Column' : 'Freeze / Pin Column'}
+                </button>
+                <button className="context-item" onClick={() => {
+                  const newHidden = new Set(hiddenColumns);
+                  newHidden.add(colMenuId);
+                  setHiddenColumns(newHidden);
+                  hideColumn(registerId, colMenuId, true);
+                  setColMenuId(null);
+                }}>
+                  <EyeOff size={16} /> Hide Column
+                </button>
+              </>
+            )}
 
             <div className="context-divider" />
             <div className="context-section-label">Footer Calculation</div>
@@ -226,13 +243,17 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
               })}
             </div>
 
-            <div className="context-divider" />
-            <button className="context-item danger" onClick={() => { if (confirm('Clear all data?')) clearColumnDataMutation.mutate(colMenuId); }}>
-              <Eraser size={16} /> Clear Column Data
-            </button>
-            <button className="context-item danger" onClick={() => { if (confirm('Delete column?')) deleteColumnMutation.mutate(colMenuId); }}>
-              <Trash2 size={16} /> Delete Column
-            </button>
+            {canEdit && (
+              <>
+                <div className="context-divider" />
+                <button className="context-item danger" onClick={() => { if (confirm('Clear all data?')) clearColumnDataMutation.mutate(colMenuId); }}>
+                  <Eraser size={16} /> Clear Column Data
+                </button>
+                <button className="context-item danger" onClick={() => { if (confirm('Delete column?')) deleteColumnMutation.mutate(colMenuId); }}>
+                  <Trash2 size={16} /> Delete Column
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -243,52 +264,60 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
           <div className="context-menu" onClick={(e) => e.stopPropagation()}>
             <div className="context-title">Row Actions</div>
 
-            <button className="context-item" onClick={() => { handleRowDownloadPDF(rowMenuId); setRowMenuId(null); }}>
-              <FileText size={16} />
-              <div className="context-item-info">
-                <span>Download as PDF</span>
-                <span className="context-item-desc">All columns included</span>
-              </div>
-            </button>
-            <button className="context-item" onClick={() => { handleRowDownloadExcel(rowMenuId); setRowMenuId(null); }}>
-              <FileSpreadsheet size={16} />
-              <div className="context-item-info">
-                <span>Download as Excel</span>
-                <span className="context-item-desc">All columns included</span>
-              </div>
-            </button>
-            <button className="context-item" onClick={() => { handleRowShareText(rowMenuId); setRowMenuId(null); }}>
-              <Share2 size={16} />
-              <div className="context-item-info">
-                <span>Share as Text</span>
-                <span className="context-item-desc">All columns included</span>
-              </div>
-            </button>
+            {canDownload && (
+              <>
+                <button className="context-item" onClick={() => { handleRowDownloadPDF(rowMenuId); setRowMenuId(null); }}>
+                  <FileText size={16} />
+                  <div className="context-item-info">
+                    <span>Download as PDF</span>
+                    <span className="context-item-desc">All columns included</span>
+                  </div>
+                </button>
+                <button className="context-item" onClick={() => { handleRowDownloadExcel(rowMenuId); setRowMenuId(null); }}>
+                  <FileSpreadsheet size={16} />
+                  <div className="context-item-info">
+                    <span>Download as Excel</span>
+                    <span className="context-item-desc">All columns included</span>
+                  </div>
+                </button>
+                <button className="context-item" onClick={() => { handleRowShareText(rowMenuId); setRowMenuId(null); }}>
+                  <Share2 size={16} />
+                  <div className="context-item-info">
+                    <span>Share as Text</span>
+                    <span className="context-item-desc">All columns included</span>
+                  </div>
+                </button>
+              </>
+            )}
 
-            <div className="context-divider" />
+            {canEdit && (
+              <>
+                <div className="context-divider" />
 
-            <button className="context-item" onClick={() => duplicateEntryMutation.mutate(rowMenuId)}>
-              <Copy size={16} /> Duplicate Record
-            </button>
+                <button className="context-item" onClick={() => duplicateEntryMutation.mutate(rowMenuId)}>
+                  <Copy size={16} /> Duplicate Record
+                </button>
 
-            <button className="context-item" onClick={() => {
-              const idx = localEntries.findIndex(e => e.id === rowMenuId);
-              if (idx !== -1) {
-                insertEntryMutation.mutate({ atIndex: idx + 1 });
-              }
-            }}>
-              <Plus size={16} />
-              <div className="context-item-info">
-                <span>Add Row Below</span>
-                <span className="context-item-desc">Insert empty row at #{(localEntries.findIndex(e => e.id === rowMenuId) + 2)}</span>
-              </div>
-            </button>
+                <button className="context-item" onClick={() => {
+                  const idx = localEntries.findIndex(e => e.id === rowMenuId);
+                  if (idx !== -1) {
+                    insertEntryMutation.mutate({ atIndex: idx + 1 });
+                  }
+                }}>
+                  <Plus size={16} />
+                  <div className="context-item-info">
+                    <span>Add Row Below</span>
+                    <span className="context-item-desc">Insert empty row at #{(localEntries.findIndex(e => e.id === rowMenuId) + 2)}</span>
+                  </div>
+                </button>
 
-            <div className="context-divider" />
+                <div className="context-divider" />
 
-            <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
-              <Trash2 size={16} /> Delete
-            </button>
+                <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
+                  <Trash2 size={16} /> Delete
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

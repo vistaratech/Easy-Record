@@ -191,7 +191,17 @@ function PermissionsManager({ user }: { user: User }) {
   const togglePermission = (registerId: number, field: keyof UserPermission) => {
     setLocalPermissions(prev => prev.map(p => {
       if (p.registerId === registerId) {
-        return { ...p, [field]: !p[field] };
+        const next = { ...p, [field]: !p[field] };
+        // Hierarchy: If canView is off, everything else must be off
+        if (field === 'canView' && !next.canView) {
+          next.canEdit = false;
+          next.canDownload = false;
+        }
+        // Hierarchy: If canEdit or canDownload is turned on, canView must be on
+        if ((field === 'canEdit' || field === 'canDownload') && next[field]) {
+          next.canView = true;
+        }
+        return next;
       }
       return p;
     }));

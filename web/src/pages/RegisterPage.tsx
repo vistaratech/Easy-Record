@@ -76,6 +76,7 @@ export default function RegisterPage() {
     placeholderData: keepPreviousData,
   });
 
+  const permissions = register?.permissions || { canView: true, canEdit: true, canDownload: true };
   const cachedRegister = queryClient.getQueryData(['register', registerId]) as any;
 
   // Fetch all registers for the Link Column feature
@@ -1241,7 +1242,7 @@ export default function RegisterPage() {
 
   const handleColDragMouseDown = useCallback((e: React.MouseEvent, colId: number) => {
     // Only left mouse button
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !permissions.canEdit) return;
 
     const th = (e.currentTarget as HTMLElement).closest('th') as HTMLTableCellElement;
     if (!th) return;
@@ -1978,6 +1979,10 @@ export default function RegisterPage() {
 
   // ── Handlers ──
   const handleCellChange = useCallback((entryId: number, columnId: string, value: string) => {
+    if (!permissions.canEdit) {
+      toast.error('Please contact the admin for permission');
+      return;
+    }
     const col = columnsRef.current.find(c => c.id.toString() === columnId);
     if (!col) return;
 
@@ -3211,7 +3216,6 @@ export default function RegisterPage() {
   }, [visibleColumns, frozenColumns, colWidths, defaultColWidth]);
 
 
-  const permissions = register?.permissions || { canView: true, canEdit: true, canDownload: true };
 
   if (isLoading) return (
     <div className="content-area">
@@ -3232,7 +3236,7 @@ export default function RegisterPage() {
     (error as any)?.message === 'ACCESS_DENIED'
   );
 
-  if (isAccessDenied) {
+  if (isAccessDenied || (register && !permissions.canView)) {
     return (
       <div className="content-area">
         <div className="empty-state">
@@ -3489,6 +3493,10 @@ export default function RegisterPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (!permissions.canEdit) {
+                      toast.error('Please contact the admin for permission');
+                      return;
+                    }
                     setNewColumnModal(true);
                   }}
                   title="Add Column"
@@ -3573,7 +3581,7 @@ export default function RegisterPage() {
               </tr>
             )}
             {displayEntries.length === 0 && !deferredSearch && deferredActiveFilters.length === 0 && columns.length > 0 && [1, 2, 3].map((n) => (
-              <tr key={`mock-${n}`} className="mock" onClick={() => setShowAddRecordModal(true)}>
+              <tr key={`mock-${n}`} className="mock" onClick={() => permissions.canEdit ? setShowAddRecordModal(true) : toast.error('Please contact the admin for permission')}>
                 <td className="serial">{n}</td>
                 {visibleColumns.map((col) => (
                   <td key={col.id}><div className="mock-cell-content">&nbsp;</div></td>
@@ -3589,7 +3597,7 @@ export default function RegisterPage() {
                 calcTypes={calcTypes}
                 calcMenu={calcMenu}
                 onCalcClick={handleCalcCellClick}
-                onAddRecord={() => addEntryMutation.mutate({})}
+                onAddRecord={() => permissions.canEdit ? addEntryMutation.mutate({}) : toast.error('Please contact the admin for permission')}
                 useColVirtual={useColVirtual}
                 virtualCols={virtualCols}
                 paddingLeft={paddingLeft}
@@ -3630,6 +3638,7 @@ export default function RegisterPage() {
         updateCalcType={updateCalcType}
         manageColsMenu={manageColsMenu}
         setManageColsMenu={setManageColsMenu}
+        permissions={permissions}
       />
 
       {/* ── Modals ── */}
@@ -3792,13 +3801,14 @@ export default function RegisterPage() {
                                 else detailInputRefs.current.delete(col.id);
                               }}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
+                                if ((e.key === 'Enter' || e.key === ' ') && permissions.canEdit) {
                                   e.preventDefault();
                                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                   openDropdown(detailViewEntry.id, col.id, col.dropdownOptions || [], rect as DOMRect);
                                 } else handleDetailKeyDown(e, col.id);
                               }}
                               onClick={(e) => {
+                                if (!permissions.canEdit) return;
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                 openDropdown(detailViewEntry.id, col.id, col.dropdownOptions || [], rect as DOMRect);
                                 if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
@@ -3829,7 +3839,10 @@ export default function RegisterPage() {
                                 handleDetailKeyDown(e, col.id);
                               }
                             }}
-                            onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: (val === 'true' || val === 'Checked') ? 'false' : 'true' }))}
+                            onClick={() => {
+                              if (!permissions.canEdit) return;
+                              setDetailEdits(prev => ({ ...prev, [colKey]: (val === 'true' || val === 'Checked') ? 'false' : 'true' }));
+                            }}
                           >
                             <input
                               type="checkbox"
