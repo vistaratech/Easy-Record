@@ -151,9 +151,15 @@ export default function AdminDashboard() {
             {view === 'overview' && (
               <div style={s.overviewContainer}>
                 <h1 style={s.viewTitle}>Dashboard Overview</h1>
-                <div style={s.statsCard}>
-                  <span style={s.statsLabel}>System Active Users</span>
-                  <span style={s.statsValue}>{stats?.userCount ?? 0}</span>
+                <div style={{ display: 'flex', gap: '2rem' }}>
+                  <div style={s.statsCard}>
+                    <span style={s.statsLabel}>System Active Users</span>
+                    <span style={s.statsValue}>{stats?.userCount ?? 0}</span>
+                  </div>
+                  <div style={s.statsCard}>
+                    <span style={s.statsLabel}>Total Registers</span>
+                    <span style={s.statsValue}>{stats?.registerCount ?? 0}</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -260,7 +266,7 @@ export default function AdminDashboard() {
                       ))}
                       {permissions.length === 0 && (
                         <p style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                          No registers available in the system.
+                          This user has not created any registers yet.
                         </p>
                       )}
                     </div>

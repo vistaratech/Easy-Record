@@ -150,8 +150,12 @@ const canDownload = (userId, regId) => checkRegisterPermission(userId, regId, 'd
 // Temporarily removed authenticateToken and adminOnly to allow direct access for testing
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT COUNT(*) as "userCount" FROM users');
-    res.json({ userCount: parseInt(rows[0].userCount, 10) });
+    const { rows: userRows } = await pool.query('SELECT COUNT(*) as count FROM users');
+    const { rows: regRows } = await pool.query('SELECT COUNT(*) as count FROM registers WHERE deleted_at IS NULL');
+    res.json({ 
+      userCount: parseInt(userRows[0].count),
+      registerCount: parseInt(regRows[0].count)
+    });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -297,7 +301,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
       r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
       r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
       r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
-      COALESCE(p.can_view, FALSE) AS "canView"
+      (CASE WHEN $3 = TRUE OR b.owner_id = $1 THEN TRUE ELSE COALESCE(p.can_view, FALSE) END) AS "canView"
     FROM registers r
     LEFT JOIN businesses b ON b.id = r.business_id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
