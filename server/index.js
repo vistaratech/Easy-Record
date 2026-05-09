@@ -452,6 +452,12 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
     if (!isAdmin && !isOwner && !hasGlobalEdit) {
       return res.status(403).json({ error: 'Permission denied: Edit access required' });
     }
+
+    // Grant the creator full access by default for new registers
+    await pool.query(
+      'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING',
+      [req.user.id, id]
+    );
   }
   
   await pool.query(`
