@@ -123,9 +123,6 @@ async function checkRegisterPermission(userId, registerId, type = 'view') {
   const isAdmin = userRows.length > 0 && userRows[0].is_admin;
   if (isAdmin) return true;
 
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [regRows[0].business_id, userId]);
-  if (bizCheck.length > 0) return true;
-
   const { rows: permRows } = await pool.query('SELECT can_view, can_add, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2', [userId, registerId]);
   if (!permRows.length) return false;
 
@@ -231,7 +228,7 @@ app.get('/api/businesses', authenticateToken, async (req, res) => {
     FROM businesses b
     LEFT JOIN registers r ON r.business_id = b.id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE $2 = TRUE OR p.can_view = TRUE
+    WHERE $2 = TRUE OR b.owner_id = $1 OR p.can_view = TRUE
   `, [userId, isAdmin]);
   res.json(rows);
 });
@@ -351,8 +348,20 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/registers', authenticateToken, async (req, res) => {
   const { businessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
-  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+  // Allow creation if admin, owner, or if the user has view access to the business
+  let hasAccess = req.user.isAdmin;
+  if (!hasAccess) {
+    const { rows: bizCheck } = await pool.query(`
+      SELECT b.id 
+      FROM businesses b
+      LEFT JOIN registers r ON r.business_id = b.id
+      LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $2
+      WHERE b.id = $1 AND (b.owner_id = $2 OR p.can_view = TRUE)
+      LIMIT 1
+    `, [businessId, req.user.id]);
+    hasAccess = bizCheck.length > 0;
+  }
+  if (!hasAccess) return res.status(403).json({ error: 'Forbidden' });
   const id = genId();
   const cols = (columns || []).map((c, i) => ({ id: id + i + 1, registerId: id, name: c.name, type: c.type, position: i, dropdownOptions: c.dropdownOptions, formula: c.formula, width: c.width, summary: c.summary }));
   const pages = [{ id: 1, name: 'Page 1', index: 0 }];
