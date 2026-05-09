@@ -183,7 +183,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
       FROM registers r
       INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL AND b.owner_id = $1
+      WHERE r.deleted_at IS NULL AND (b.owner_id = $1 OR p.user_id = $1)
       ORDER BY b.name, r.name
     `, [userId]);
     res.json(rows);
@@ -231,7 +231,7 @@ app.get('/api/businesses', authenticateToken, async (req, res) => {
     FROM businesses b
     LEFT JOIN registers r ON r.business_id = b.id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE $2 = TRUE OR b.owner_id = $1 OR p.can_view = TRUE
+    WHERE $2 = TRUE OR b.owner_id = $1 OR p.user_id = $1
   `, [userId, isAdmin]);
   res.json(rows);
 });
@@ -283,7 +283,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
   const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
   const isAdmin = userRows.length > 0 && userRows[0].is_admin;
 
-  // Get registers that the user owns (via business) or has explicit view permission for
+  // Get registers that the user owns (via business) or has an explicit permission record for
   const { rows } = await pool.query(`
     SELECT DISTINCT
       r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
@@ -291,8 +291,8 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
       r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
       CASE 
         WHEN $3 = TRUE THEN TRUE
+        WHEN p.can_view IS NOT NULL THEN p.can_view
         WHEN b.owner_id = $1 THEN TRUE
-        WHEN p.can_view = TRUE THEN TRUE
         ELSE FALSE
       END AS "hasAccess"
     FROM registers r
@@ -300,7 +300,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
     WHERE r.business_id = $2 
       AND r.deleted_at IS NULL
-      AND ($3 = TRUE OR b.owner_id = $1 OR p.can_view IS NOT NULL)
+      AND ($3 = TRUE OR b.owner_id = $1 OR p.user_id = $1)
   `, [userId, businessId, isAdmin]);
 
   res.json(rows);
