@@ -317,7 +317,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
     WHERE r.business_id = $2 
       AND r.deleted_at IS NULL
-      AND ($3 = TRUE OR p.can_view = TRUE)
+      AND ($3 = TRUE OR p.can_view = TRUE OR b.owner_id = $1)
   `, [userId, businessId, isAdmin]);
 
   res.json(rows);
@@ -349,7 +349,7 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
   const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
   const hasPermissions = permRows.length > 0;
 
-  if (req.user.isAdmin) {
+  if (req.user.isAdmin || isOwner) {
     reg.permissions = { canView: true, canEdit: true, canDownload: true };
   } else if (hasPermissions) {
     reg.permissions = permRows[0];
