@@ -168,25 +168,22 @@ app.get('/api/admin/users', async (req, res) => {
   }
 });
 
-app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, async (req, res) => {
+app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   try {
     const { userId } = req.params;
-    // Get registers that belong to a business owned by the selected userId
+    // Get ALL active registers and the specific permissions for this userId
     const { rows } = await pool.query(`
       SELECT 
         r.id AS "registerId", 
         r.name AS "registerName",
         b.name AS "businessName",
-        COALESCE(p.can_view, FALSE) AS "canView",
-        COALESCE(p.can_edit, FALSE) AS "canEdit",
-        COALESCE(p.can_download, FALSE) AS "canDownload"
+        COALESCE(p.can_view, FALSE) AS "canView"
       FROM registers r
       INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL AND b.owner_id = $1
-      ORDER BY r.name
+      WHERE r.deleted_at IS NULL
+      ORDER BY b.name, r.name
     `, [userId]);
-    console.log(`Permissions fetch for user ${userId}: found ${rows.length} registers`);
     res.json(rows);
   } catch (err) {
     console.error('Permissions fetch error:', err);
@@ -194,21 +191,19 @@ app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, as
   }
 });
 
-app.post('/api/admin/permissions', authenticateToken, adminOnly, async (req, res) => {
-  const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canEdit, canDownload }, ...]
+app.post('/api/admin/permissions', async (req, res) => {
+  const { userId, permissions } = req.body; // permissions: [{ registerId, canView }, ...]
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     for (const p of permissions) {
       await client.query(`
-        INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO user_permissions (user_id, register_id, can_view)
+        VALUES ($1, $2, $3)
         ON CONFLICT (user_id, register_id) DO UPDATE SET
-          can_view = EXCLUDED.can_view,
-          can_edit = EXCLUDED.can_edit,
-          can_download = EXCLUDED.can_download
-      `, [userId, p.registerId, !!p.canView, !!p.canEdit, !!p.canDownload]);
+          can_view = EXCLUDED.can_view
+      `, [userId, p.registerId, !!p.canView]);
     }
     await client.query('COMMIT');
     res.json({ ok: true });
@@ -220,7 +215,6 @@ app.post('/api/admin/permissions', authenticateToken, adminOnly, async (req, res
     client.release();
   }
 });
-
 // ── BUSINESSES ──
 app.get('/api/businesses', authenticateToken, async (req, res) => {
   const userId = req.user.id;
