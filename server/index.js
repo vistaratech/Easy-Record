@@ -183,7 +183,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
       FROM registers r
       INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL AND (b.owner_id = $1 OR p.user_id = $1)
+      WHERE r.deleted_at IS NULL AND b.owner_id = $1
       ORDER BY b.name, r.name
     `, [userId]);
     res.json(rows);
