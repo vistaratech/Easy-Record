@@ -78,14 +78,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={token ? <Navigate to="/" replace /> : <LoginPage />} />
-      <Route
-        path="/admin"
-        element={
-          <AdminRoute>
-            <AdminDashboard />
-          </AdminRoute>
-        }
-      />
+      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/*" element={<PrivateRoute><HomePage /></PrivateRoute>} />
     </Routes>
   );
