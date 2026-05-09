@@ -173,20 +173,16 @@ app.get('/api/admin/users', async (req, res) => {
 app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   try {
     const { userId } = req.params;
-    // Get registers that belong to businesses owned by the selected user
     const { rows } = await pool.query(`
-      SELECT 
-        r.id AS "registerId", 
-        r.name AS "registerName",
-        b.name AS "businessName",
-        COALESCE(p.can_view, FALSE) AS "canView",
-        COALESCE(p.can_edit, FALSE) AS "canEdit",
-        COALESCE(p.can_download, FALSE) AS "canDownload"
-      FROM registers r
-      INNER JOIN businesses b ON b.id = r.business_id
-      LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL AND b.owner_id = $1
-      ORDER BY b.name, r.name
+      SELECT r.id AS "registerId", r.name AS "registerName", b.name AS "businessName",
+           COALESCE(p.can_view, FALSE) AS "canView", 
+           COALESCE(p.can_edit, FALSE) AS "canEdit", 
+           COALESCE(p.can_download, FALSE) AS "canDownload"
+    FROM registers r
+    JOIN businesses b ON r.business_id = b.id
+    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+    WHERE r.deleted_at IS NULL
+    ORDER BY b.name, r.name
     `, [userId]);
     res.json(rows);
   } catch (err) {
@@ -317,7 +313,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
     WHERE r.business_id = $2 
       AND r.deleted_at IS NULL
-      AND ($3 = TRUE OR p.can_view = TRUE OR b.owner_id = $1)
+      AND ($3 = TRUE OR p.can_view = TRUE)
   `, [userId, businessId, isAdmin]);
 
   res.json(rows);
@@ -349,7 +345,7 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
   const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
   const hasPermissions = permRows.length > 0;
 
-  if (req.user.isAdmin || isOwner) {
+  if (req.user.isAdmin) {
     reg.permissions = { canView: true, canEdit: true, canDownload: true };
   } else if (hasPermissions) {
     reg.permissions = permRows[0];
@@ -460,60 +456,49 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
     );
   }
   
-  try {
-    await pool.query(`
-      INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
-      ON CONFLICT (id) DO UPDATE SET
-        business_id=EXCLUDED.business_id,
-        folder_id=EXCLUDED.folder_id,
-        name=EXCLUDED.name,
-        icon=EXCLUDED.icon,
-        icon_color=EXCLUDED.icon_color,
-        category=EXCLUDED.category,
-        template=EXCLUDED.template,
-        columns=EXCLUDED.columns,
-        pages=EXCLUDED.pages,
-        share_link=EXCLUDED.share_link,
-        shared_with=EXCLUDED.shared_with,
-        deleted_items=EXCLUDED.deleted_items,
-        entry_count=EXCLUDED.entry_count,
-        updated_at=NOW()
-    `, [
-      id, reg.businessId, reg.folderId || null, reg.name, reg.icon || 'file-text', reg.iconColor || null,
-      reg.category || 'general', reg.template || reg.name, JSON.stringify(reg.columns || []),
-      JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), reg.shareLink || null,
-      JSON.stringify(reg.sharedWith || []), JSON.stringify(reg.deletedItems || []), reg.entryCount || (reg.entries ? reg.entries.length : 0)
-    ]);
+  await pool.query(`
+    INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      business_id=EXCLUDED.business_id,
+      folder_id=EXCLUDED.folder_id,
+      name=EXCLUDED.name,
+      icon=EXCLUDED.icon,
+      icon_color=EXCLUDED.icon_color,
+      category=EXCLUDED.category,
+      template=EXCLUDED.template,
+      columns=EXCLUDED.columns,
+      pages=EXCLUDED.pages,
+      share_link=EXCLUDED.share_link,
+      shared_with=EXCLUDED.shared_with,
+      deleted_items=EXCLUDED.deleted_items,
+      entry_count=EXCLUDED.entry_count,
+      updated_at=NOW()
+  `, [
+    id, reg.businessId, reg.folderId || null, reg.name, reg.icon || 'file-text', reg.iconColor || null,
+    reg.category || 'general', reg.template || reg.name, JSON.stringify(reg.columns || []),
+    JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), reg.shareLink || null,
+    JSON.stringify(reg.sharedWith || []), JSON.stringify(reg.deletedItems || []), reg.entryCount || (reg.entries ? reg.entries.length : 0)
+  ]);
 
-    if (reg.entries && reg.entries.length > 0) {
-      const chunkSize = 100; // Smaller chunks for safety
-      for (let i = 0; i < reg.entries.length; i += chunkSize) {
-        const chunk = reg.entries.slice(i, i + chunkSize);
-        const cValues = [];
-        const cParams = [];
-        for (let j = 0; j < chunk.length; j++) {
-           const e = chunk[j];
-           const offset = j * 6;
-           cValues.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
-           cParams.push(e.id, id, e.rowNumber || (i+j+1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
-        }
-        await pool.query(`
-          INSERT INTO entries(id, register_id, row_number, cells, cell_styles, page_index) 
-          VALUES ${cValues.join(',')}
-          ON CONFLICT (id) DO UPDATE SET
-            row_number=EXCLUDED.row_number,
-            cells=EXCLUDED.cells,
-            cell_styles=EXCLUDED.cell_styles,
-            page_index=EXCLUDED.page_index
-        `, cParams);
+  if (reg.entries && reg.entries.length > 0) {
+    await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
+    const chunkSize = 1000;
+    for (let i = 0; i < reg.entries.length; i += chunkSize) {
+      const chunk = reg.entries.slice(i, i + chunkSize);
+      const cValues = [];
+      const cParams = [];
+      for (let j = 0; j < chunk.length; j++) {
+         const e = chunk[j];
+         const offset = j * 6;
+         cValues.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
+         cParams.push(e.id, id, e.rowNumber || (i+j+1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
       }
+      await pool.query(`INSERT INTO entries(id, register_id, row_number, cells, cell_styles, page_index) VALUES ${cValues.join(',')}`, cParams);
     }
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('PUT /api/registers error:', err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
+
+  res.json({ ok: true });
 });
 
 app.patch('/api/registers/:id', authenticateToken, async (req, res) => {
