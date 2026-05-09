@@ -1,7 +1,6 @@
 import { useCallback, memo, useState, startTransition, useDeferredValue, useMemo } from 'react';
-import { Menu, Search, Plus, FileText, Lock, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Menu, Search, Plus, FileText, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '../../lib/auth';
 import type { RegisterSummary, Business } from '../../lib/api';
@@ -207,42 +206,43 @@ export const Sidebar = memo(function Sidebar({
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
 
   const renderRegister = (reg: RegisterSummary, indent: number = 0) => {
-    const isLocked = !reg.canView;
+    const noAccess = reg.hasAccess === false;
     return (
       <div
         key={reg.id}
-        draggable={!isLocked}
+        draggable={!noAccess}
         onDragStart={(e) => {
-          if (isLocked) return;
+          if (noAccess) { e.preventDefault(); return; }
           e.dataTransfer.setData('text/plain', reg.id.toString());
           e.dataTransfer.effectAllowed = 'move';
         }}
-        className={`register-item ${Number(currentRegId) === reg.id ? 'active' : ''} ${isLocked ? 'register-item--locked' : ''}`}
+        className={`register-item ${Number(currentRegId) === reg.id ? 'active' : ''}`}
         onClick={() => {
-          if (isLocked) {
-            toast.error('Access denied by admin');
-            return;
-          }
+          if (noAccess) return;
           startTransition(() => { navigate(`/register/${reg.id}`); closeSidebar(); });
         }}
-        onMouseEnter={() => !isLocked && prefetchRegister(reg.id)}
-        style={!isCollapsed && indent ? { paddingLeft: `${16 + indent}px` } : undefined}
-        data-tooltip={isCollapsed ? (isLocked ? `${reg.name} (Locked)` : reg.name) : undefined}
+        onMouseEnter={() => !noAccess && prefetchRegister(reg.id)}
+        style={{
+          ...((!isCollapsed && indent) ? { paddingLeft: `${16 + indent}px` } : {}),
+          ...(noAccess ? { opacity: 0.4, cursor: 'not-allowed', filter: 'grayscale(0.4)' } : {}),
+        }}
+        data-tooltip={isCollapsed ? reg.name : undefined}
+        title={noAccess ? 'Access restricted by admin' : undefined}
       >
         <div
           className="register-icon-bg"
-          {...{ style: { '--dyn-bg': isLocked ? '#f1f5f9' : (reg.iconColor ? `${reg.iconColor}20` : 'rgba(27,42,74,0.08)') } as React.CSSProperties }}
+          {...{ style: { '--dyn-bg': reg.iconColor ? `${reg.iconColor}20` : 'rgba(27,42,74,0.08)' } as React.CSSProperties }}
         >
-          {isLocked ? <Lock size={14} color="#94a3b8" /> : <FileText size={16} color={reg.iconColor || 'var(--navy)'} />}
+          <FileText size={16} color={reg.iconColor || 'var(--navy)'} />
         </div>
         <div className="register-item-info">
-          <div className="register-item-name">
-            {reg.name}
-            {isLocked && <Lock size={10} style={{ marginLeft: 4, opacity: 0.5 }} />}
+          <div className="register-item-name">{reg.name}</div>
+          <div className="register-item-meta">
+            {noAccess ? 'Restricted' : `${reg.entryCount} entries ${!isCollapsed ? `• ${new Date(reg.updatedAt).toLocaleDateString()}` : ''}`}
           </div>
-          <div className="register-item-meta">{isLocked ? 'Locked' : `${reg.entryCount} entries`}{!isCollapsed && !isLocked && ` • ${new Date(reg.updatedAt).toLocaleDateString()}`}</div>
+          {!isCollapsed && !noAccess && reg.lastActivity && <div className="register-item-activity">{reg.lastActivity}</div>}
         </div>
-        {!isLocked && (
+        {!noAccess && (
           <button
             className="register-item-menu"
             title="Register options"

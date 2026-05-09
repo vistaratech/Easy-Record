@@ -798,50 +798,6 @@ a {
 .register-item-menu {
   opacity: 0;
   width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-/* ── Locked States ── */
-.category-card--locked {
-  opacity: 0.55;
-  cursor: not-allowed !important;
-  filter: grayscale(0.5);
-  background: #f8fafc !important;
-  border-style: dashed !important;
-}
-
-.category-card--locked:hover {
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-.category-card--locked .category-icon {
-  background: #e2e8f0 !important;
-  color: #94a3b8 !important;
-}
-
-.register-item--locked {
-  opacity: 0.5;
-  cursor: not-allowed !important;
-}
-
-.register-item--locked:hover {
-  background: transparent !important;
-}
-
-.register-item--locked .register-icon-bg {
-  background: #f1f5f9 !important;
-  filter: grayscale(1);
-}
-
-.register-item--locked .register-item-name {
-  color: #94a3b8 !important;
-}
   min-width: 28px;
   height: 28px;
   display: flex;

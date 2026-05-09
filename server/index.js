@@ -150,12 +150,8 @@ const canDownload = (userId, regId) => checkRegisterPermission(userId, regId, 'd
 // Temporarily removed authenticateToken and adminOnly to allow direct access for testing
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    const { rows: userRows } = await pool.query('SELECT COUNT(*) as count FROM users');
-    const { rows: regRows } = await pool.query('SELECT COUNT(*) as count FROM registers WHERE deleted_at IS NULL');
-    res.json({ 
-      userCount: parseInt(userRows[0].count),
-      registerCount: parseInt(regRows[0].count)
-    });
+    const { rows } = await pool.query('SELECT COUNT(*) as "userCount" FROM users');
+    res.json({ userCount: parseInt(rows[0].userCount, 10) });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -175,7 +171,7 @@ app.get('/api/admin/users', async (req, res) => {
 app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   try {
     const { userId } = req.params;
-    // Get ALL active registers and the specific permissions for this userId
+    // Get registers that belong to businesses owned by the selected user
     const { rows } = await pool.query(`
       SELECT 
         r.id AS "registerId", 
@@ -192,18 +188,6 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   } catch (err) {
     console.error('Permissions fetch error:', err);
     res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.patch('/api/admin/users/:userId/role', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { isAdmin } = req.body;
-    await pool.query('UPDATE users SET is_admin = $1 WHERE id = $2', [!!isAdmin, userId]);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('Role update error:', err);
-    res.status(500).json({ error: 'Failed to update user role' });
   }
 });
 
@@ -301,13 +285,18 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
       r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
       r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
       r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
-      (CASE WHEN $3 = TRUE OR b.owner_id = $1 THEN TRUE ELSE COALESCE(p.can_view, FALSE) END) AS "canView"
+      CASE 
+        WHEN $3 = TRUE THEN TRUE
+        WHEN b.owner_id = $1 THEN TRUE
+        WHEN p.can_view = TRUE THEN TRUE
+        ELSE FALSE
+      END AS "hasAccess"
     FROM registers r
     LEFT JOIN businesses b ON b.id = r.business_id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
     WHERE r.business_id = $2 
       AND r.deleted_at IS NULL
-      AND ($3 = TRUE OR b.owner_id = $1 OR p.can_view = TRUE)
+      AND ($3 = TRUE OR b.owner_id = $1 OR p.can_view IS NOT NULL)
   `, [userId, businessId, isAdmin]);
 
   res.json(rows);

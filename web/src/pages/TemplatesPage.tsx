@@ -77,7 +77,6 @@ export default function TemplatesPage() {
           category: newReg.category, template: newReg.template,
           createdAt: newReg.createdAt, updatedAt: newReg.updatedAt,
           entryCount: newReg.entryCount ?? 0, lastActivity: '',
-          canView: true,
         }];
       });
       // Background refetch to sync server state (won't block navigation)

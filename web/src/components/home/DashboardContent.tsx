@@ -1,8 +1,6 @@
 import { Plus, Upload, FileText, FolderOpen } from 'lucide-react';
 import { startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import { Lock } from 'lucide-react';
 import type { RegisterSummary } from '../../lib/api';
 
 interface DashboardContentProps {
@@ -48,28 +46,24 @@ export function DashboardContent({ filtered, excelMutation, handleFileUpload, on
         </p>
         <div className="categories-grid categories-grid--no-pad">
           {filtered.map((reg) => {
-            const isLocked = !reg.canView;
+            const noAccess = reg.hasAccess === false;
             return (
-              <div 
-                key={reg.id} 
-                className={`category-card ${isLocked ? 'category-card--locked' : ''}`} 
+              <div
+                key={reg.id}
+                className={`category-card ${noAccess ? 'category-card--no-access' : ''}`}
                 onClick={() => {
-                  if (isLocked) {
-                    toast.error('Access denied by admin');
-                    return;
-                  }
+                  if (noAccess) return;
                   startTransition(() => navigate(`/register/${reg.id}`));
                 }}
+                style={noAccess ? { opacity: 0.45, cursor: 'not-allowed', filter: 'grayscale(0.4)' } : undefined}
+                title={noAccess ? 'Access restricted by admin' : reg.name}
               >
                 <div className="category-icon" {...{ style: { '--dyn-bg': reg.iconColor || 'var(--navy)' } as React.CSSProperties }}>
-                  {isLocked ? <Lock size={20} /> : <FileText size={24} />}
+                  <FileText size={24} />
                 </div>
-                <div className="category-name">
-                  {reg.name}
-                  {isLocked && <Lock size={12} style={{ marginLeft: 6, opacity: 0.5 }} />}
-                </div>
+                <div className="category-name">{reg.name}</div>
                 <div className="category-count">
-                  {isLocked ? 'Locked by admin' : `${reg.entryCount} entries • ${new Date(reg.updatedAt).toLocaleDateString()}${reg.lastActivity ? ` | ${reg.lastActivity}` : ''}`}
+                  {noAccess ? 'Access restricted' : `${reg.entryCount} entries \u2022 ${new Date(reg.updatedAt).toLocaleDateString()}${reg.lastActivity ? ` | ${reg.lastActivity}` : ''}`}
                 </div>
               </div>
             );
