@@ -45,29 +45,15 @@ export function DashboardContent({ filtered, excelMutation, handleFileUpload, on
           {filtered.length} register{filtered.length !== 1 ? 's' : ''} &bull; Click to open
         </p>
         <div className="categories-grid categories-grid--no-pad">
-          {filtered.map((reg) => {
-            const noAccess = reg.hasAccess === false;
-            return (
-              <div
-                key={reg.id}
-                className={`category-card ${noAccess ? 'category-card--no-access' : ''}`}
-                onClick={() => {
-                  if (noAccess) return;
-                  startTransition(() => navigate(`/register/${reg.id}`));
-                }}
-                style={noAccess ? { opacity: 0.45, cursor: 'not-allowed', filter: 'grayscale(0.4)' } : undefined}
-                title={noAccess ? 'Access restricted by admin' : reg.name}
-              >
-                <div className="category-icon" {...{ style: { '--dyn-bg': reg.iconColor || 'var(--navy)' } as React.CSSProperties }}>
-                  <FileText size={24} />
-                </div>
-                <div className="category-name">{reg.name}</div>
-                <div className="category-count">
-                  {noAccess ? 'Access restricted' : `${reg.entryCount} entries \u2022 ${new Date(reg.updatedAt).toLocaleDateString()}${reg.lastActivity ? ` | ${reg.lastActivity}` : ''}`}
-                </div>
+          {filtered.map((reg) => (
+            <div key={reg.id} className="category-card" onClick={() => startTransition(() => navigate(`/register/${reg.id}`))}>
+              <div className="category-icon" {...{ style: { '--dyn-bg': reg.iconColor || 'var(--navy)' } as React.CSSProperties }}>
+                <FileText size={24} />
               </div>
-            );
-          })}
+              <div className="category-name">{reg.name}</div>
+              <div className="category-count">{reg.entryCount} entries &bull; {new Date(reg.updatedAt).toLocaleDateString()}{reg.lastActivity ? ` | ${reg.lastActivity}` : ''}</div>
+            </div>
+          ))}
           <div className="category-card category-card--dashed" onClick={() => navigate('/templates')}>
             <div className="category-icon category-icon--muted">
               <Plus size={24} />

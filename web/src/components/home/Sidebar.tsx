@@ -205,57 +205,42 @@ export const Sidebar = memo(function Sidebar({
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
 
-  const renderRegister = (reg: RegisterSummary, indent: number = 0) => {
-    const noAccess = reg.hasAccess === false;
-    return (
+  const renderRegister = (reg: RegisterSummary, indent: number = 0) => (
+    <div
+      key={reg.id}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', reg.id.toString());
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      className={`register-item ${Number(currentRegId) === reg.id ? 'active' : ''}`}
+      onClick={() => { startTransition(() => { navigate(`/register/${reg.id}`); closeSidebar(); }); }}
+      onMouseEnter={() => prefetchRegister(reg.id)}
+      style={!isCollapsed && indent ? { paddingLeft: `${16 + indent}px` } : undefined}
+      data-tooltip={isCollapsed ? reg.name : undefined}
+    >
       <div
-        key={reg.id}
-        draggable={!noAccess}
-        onDragStart={(e) => {
-          if (noAccess) { e.preventDefault(); return; }
-          e.dataTransfer.setData('text/plain', reg.id.toString());
-          e.dataTransfer.effectAllowed = 'move';
-        }}
-        className={`register-item ${Number(currentRegId) === reg.id ? 'active' : ''}`}
-        onClick={() => {
-          if (noAccess) return;
-          startTransition(() => { navigate(`/register/${reg.id}`); closeSidebar(); });
-        }}
-        onMouseEnter={() => !noAccess && prefetchRegister(reg.id)}
-        style={{
-          ...((!isCollapsed && indent) ? { paddingLeft: `${16 + indent}px` } : {}),
-          ...(noAccess ? { opacity: 0.4, cursor: 'not-allowed', filter: 'grayscale(0.4)' } : {}),
-        }}
-        data-tooltip={isCollapsed ? reg.name : undefined}
-        title={noAccess ? 'Access restricted by admin' : undefined}
+        className="register-icon-bg"
+        {...{ style: { '--dyn-bg': reg.iconColor ? `${reg.iconColor}20` : 'rgba(27,42,74,0.08)' } as React.CSSProperties }}
       >
-        <div
-          className="register-icon-bg"
-          {...{ style: { '--dyn-bg': reg.iconColor ? `${reg.iconColor}20` : 'rgba(27,42,74,0.08)' } as React.CSSProperties }}
-        >
-          <FileText size={16} color={reg.iconColor || 'var(--navy)'} />
-        </div>
-        <div className="register-item-info">
-          <div className="register-item-name">{reg.name}</div>
-          <div className="register-item-meta">
-            {noAccess ? 'Restricted' : `${reg.entryCount} entries ${!isCollapsed ? `• ${new Date(reg.updatedAt).toLocaleDateString()}` : ''}`}
-          </div>
-          {!isCollapsed && !noAccess && reg.lastActivity && <div className="register-item-activity">{reg.lastActivity}</div>}
-        </div>
-        {!noAccess && (
-          <button
-            className="register-item-menu"
-            title="Register options"
-            aria-label="Register options"
-            onClick={(e) => { e.stopPropagation(); setMenuId(menuId === reg.id ? null : reg.id); }}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--muted)' }}
-          >
-            <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>⋮</span>
-          </button>
-        )}
+        <FileText size={16} color={reg.iconColor || 'var(--navy)'} />
       </div>
-    );
-  };
+      <div className="register-item-info">
+        <div className="register-item-name">{reg.name}</div>
+        <div className="register-item-meta">{reg.entryCount} entries {!isCollapsed && `• ${new Date(reg.updatedAt).toLocaleDateString()}`}</div>
+        {!isCollapsed && reg.lastActivity && <div className="register-item-activity">{reg.lastActivity}</div>}
+      </div>
+      <button
+        className="register-item-menu"
+        title="Register options"
+        aria-label="Register options"
+        onClick={(e) => { e.stopPropagation(); setMenuId(menuId === reg.id ? null : reg.id); }}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--muted)' }}
+      >
+        <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>⋮</span>
+      </button>
+    </div>
+  );
 
   return (
     <>

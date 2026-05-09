@@ -345,7 +345,7 @@ export function bustRegisterCache(registerId: number): void {
 export async function listRegisters(businessId: number): Promise<RegisterSummary[]> {
   const res = await fetchApi(`${API}/registers?businessId=${businessId}`);
   const all: RegisterSummary[] = await res.json();
-  return all.filter(r => !r.deletedAt);
+  return all.filter(r => !r.deletedAt && r.hasAccess !== false);
 }
 
 export async function listDeletedRegisters(businessId: number): Promise<RegisterSummary[]> {
