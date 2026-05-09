@@ -29,7 +29,7 @@ interface RegisterToolbarProps {
   redo?: () => void;
   undoStackCount?: number;
   redoStackCount?: number;
-  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
+  permissions?: { canView: boolean; canAdd: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export const RegisterToolbar = memo(function RegisterToolbar({

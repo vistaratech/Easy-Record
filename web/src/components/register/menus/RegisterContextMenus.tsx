@@ -49,7 +49,7 @@ interface RegisterContextMenusProps {
   // Manage Columns Dropdown
   manageColsMenu: { rect: DOMRect } | null;
   setManageColsMenu: (v: { rect: DOMRect } | null) => void;
-  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
+  permissions?: { canView: boolean; canAdd: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export function RegisterContextMenus(props: RegisterContextMenusProps) {

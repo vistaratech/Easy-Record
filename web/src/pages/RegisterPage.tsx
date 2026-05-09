@@ -76,7 +76,7 @@ export default function RegisterPage() {
     placeholderData: keepPreviousData,
   });
 
-  const permissions = register?.permissions || { canView: true, canEdit: true, canDownload: true };
+  const permissions = register?.permissions || { canView: true, canAdd: true, canEdit: true, canDownload: true };
   const cachedRegister = queryClient.getQueryData(['register', registerId]) as any;
 
   // Fetch all registers for the Link Column feature

@@ -1999,6 +1999,7 @@ export interface UserPermission {
   registerName: string;
   businessName?: string;
   canView: boolean;
+  canAdd: boolean;
   canEdit: boolean;
   canDownload: boolean;
 }
