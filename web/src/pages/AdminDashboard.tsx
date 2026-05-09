@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { 
   Users, LayoutDashboard, ChevronRight, Check, Eye, Pencil, Download, 
-  Search, Shield, User as UserIcon, Plus, FileText, Settings, 
+  Search, Shield, FileText,
   Database, Info, AlertCircle
 } from 'lucide-react';
 import { 
@@ -22,7 +22,6 @@ export default function AdminDashboard() {
   const [permLoading, setPermLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId), [users, selectedUserId]);
 
@@ -40,7 +39,7 @@ export default function AdminDashboard() {
       setStats(sData);
       setUsers(uData);
     } catch (err: any) {
-      setError(err.message);
+      console.error(err);
     } finally {
       setLoading(false);
     }
