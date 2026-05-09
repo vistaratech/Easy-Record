@@ -12,7 +12,7 @@ interface SavedTemplate {
 interface RegisterHeaderProps {
   register: any;
   handleOpenExport: () => void;
-  permissions?: { canView: boolean; canAdd: boolean; canEdit: boolean; canDownload: boolean };
+  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export function RegisterHeader({ register, handleOpenExport, permissions }: RegisterHeaderProps) {

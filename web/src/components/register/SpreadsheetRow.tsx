@@ -343,7 +343,7 @@ interface SpreadsheetRowProps {
   defaultColWidth?: number;
   onCellFormatClick?: (entryId: number, colId: string, rect: DOMRect) => void;
   searchTerm?: string;
-  permissions?: { canView: boolean; canAdd: boolean; canEdit: boolean; canDownload: boolean };
+  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: SpreadsheetRowProps) {

@@ -49,7 +49,7 @@ interface RegisterContextMenusProps {
   // Manage Columns Dropdown
   manageColsMenu: { rect: DOMRect } | null;
   setManageColsMenu: (v: { rect: DOMRect } | null) => void;
-  permissions?: { canView: boolean; canAdd: boolean; canEdit: boolean; canDownload: boolean };
+  permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export function RegisterContextMenus(props: RegisterContextMenusProps) {
@@ -68,7 +68,6 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
   } = props;
 
   const canEdit = permissions?.canEdit ?? true;
-  const canAdd = permissions?.canAdd ?? true;
   const canDownload = permissions?.canDownload ?? true;
 
   return (
@@ -294,15 +293,6 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
             {canEdit && (
               <>
                 <div className="context-divider" />
-                <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
-                  <Trash2 size={16} /> Delete
-                </button>
-              </>
-            )}
-
-            {canAdd && (
-              <>
-                <div className="context-divider" />
 
                 <button className="context-item" onClick={() => duplicateEntryMutation.mutate(rowMenuId)}>
                   <Copy size={16} /> Duplicate Record
@@ -319,6 +309,12 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
                     <span>Add Row Below</span>
                     <span className="context-item-desc">Insert empty row at #{(localEntries.findIndex(e => e.id === rowMenuId) + 2)}</span>
                   </div>
+                </button>
+
+                <div className="context-divider" />
+
+                <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
+                  <Trash2 size={16} /> Delete
                 </button>
               </>
             )}

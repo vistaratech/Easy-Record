@@ -1,5 +1,6 @@
+// src/pages/AdminDashboard.tsx
 import { useEffect, useState } from 'react';
-import { Users, LayoutDashboard, ChevronRight, ChevronLeft, Check, Eye, Pencil, Download, Plus } from 'lucide-react';
+import { Users, LayoutDashboard, ChevronRight, ChevronLeft, Check, Eye, Pencil, Download } from 'lucide-react';
 
 interface UserRecord {
   id: string;
@@ -18,7 +19,6 @@ interface RegisterPermission {
   registerName: string;
   businessName: string;
   canView: boolean;
-  canAdd: boolean;
   canEdit: boolean;
   canDownload: boolean;
 }
@@ -72,7 +72,7 @@ export default function AdminDashboard() {
     }
   }
 
-  async function togglePermission(regId: string, field: 'canView' | 'canAdd' | 'canEdit' | 'canDownload') {
+  async function togglePermission(regId: string, field: 'canView' | 'canEdit' | 'canDownload') {
     if (!selectedUser) return;
 
     const current = permissions.find(p => p.registerId === regId);
@@ -82,14 +82,13 @@ export default function AdminDashboard() {
     const updated = { ...current };
     updated[field] = !updated[field];
 
-    // Hierarchy: If canView is turned off, disable all other permissions
+    // Hierarchy: If canView is turned off, disable edit and download too
     if (field === 'canView' && !updated.canView) {
-      updated.canAdd = false;
       updated.canEdit = false;
       updated.canDownload = false;
     }
-    // Hierarchy: If canAdd, canEdit, or canDownload is turned on, canView must be on
-    if ((field === 'canAdd' && updated.canAdd) || (field === 'canEdit' && updated.canEdit) || (field === 'canDownload' && updated.canDownload)) {
+    // Hierarchy: If canEdit or canDownload is turned on, canView must be on
+    if ((field === 'canEdit' && updated.canEdit) || (field === 'canDownload' && updated.canDownload)) {
       updated.canView = true;
     }
 
@@ -103,7 +102,7 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: selectedUser.id,
-          permissions: [{ registerId: regId, canView: updated.canView, canAdd: updated.canAdd, canEdit: updated.canEdit, canDownload: updated.canDownload }]
+          permissions: [{ registerId: regId, canView: updated.canView, canEdit: updated.canEdit, canDownload: updated.canDownload }]
         })
       });
       if (!res.ok) throw new Error('Failed to save');
@@ -263,7 +262,6 @@ export default function AdminDashboard() {
                       <div style={s.permHeader}>
                         <div style={{ flex: 1 }}>Register</div>
                         <div style={s.permColHeader}><Eye size={14} /> View</div>
-                        <div style={s.permColHeader}><Plus size={14} /> Add</div>
                         <div style={s.permColHeader}><Pencil size={14} /> Edit</div>
                         <div style={s.permColHeader}><Download size={14} /> Download</div>
                       </div>
@@ -282,16 +280,6 @@ export default function AdminDashboard() {
                               <input type="checkbox" checked={p.canView} onChange={() => togglePermission(p.registerId, 'canView')} style={s.hiddenCb} />
                               <div style={{ ...s.customCb, ...(p.canView ? s.cbCheckedView : {}) }}>
                                 {p.canView && <Check size={14} strokeWidth={3} color="#fff" />}
-                              </div>
-                            </label>
-                          </div>
-
-                          {/* Add Checkbox */}
-                          <div style={s.permCol}>
-                            <label style={s.checkLabel}>
-                              <input type="checkbox" checked={p.canAdd} onChange={() => togglePermission(p.registerId, 'canAdd')} style={s.hiddenCb} />
-                              <div style={{ ...s.customCb, ...(p.canAdd ? s.cbCheckedAdd : {}) }}>
-                                {p.canAdd && <Check size={14} strokeWidth={3} color="#fff" />}
                               </div>
                             </label>
                           </div>
@@ -427,7 +415,6 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
   },
   cbCheckedView: { background: '#002D5D', borderColor: '#002D5D' },
-  cbCheckedAdd: { background: '#8b5cf6', borderColor: '#8b5cf6' },
   cbCheckedEdit: { background: '#0891b2', borderColor: '#0891b2' },
   cbCheckedDownload: { background: '#059669', borderColor: '#059669' },
 
