@@ -120,7 +120,7 @@ export interface Page { id: number; name: string; index: number; }
 export interface RegisterDetail extends RegisterSummary {
   columns: Column[]; entries: Entry[]; pages: Page[];
   shareLink?: string; sharedWith?: SharedUser[];
-  deletedItems?: DeletedItem[]; permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
+  deletedItems?: DeletedItem[]; permissions?: { canView: boolean; canAdd: boolean; canEdit: boolean; canDownload: boolean };
 }
 
 export interface SharedUser {

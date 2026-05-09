@@ -68,6 +68,7 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
   } = props;
 
   const canEdit = permissions?.canEdit ?? true;
+  const canAdd = permissions?.canAdd ?? true;
   const canDownload = permissions?.canDownload ?? true;
 
   return (
@@ -293,6 +294,15 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
             {canEdit && (
               <>
                 <div className="context-divider" />
+                <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
+                  <Trash2 size={16} /> Delete
+                </button>
+              </>
+            )}
+
+            {canAdd && (
+              <>
+                <div className="context-divider" />
 
                 <button className="context-item" onClick={() => duplicateEntryMutation.mutate(rowMenuId)}>
                   <Copy size={16} /> Duplicate Record
@@ -309,12 +319,6 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
                     <span>Add Row Below</span>
                     <span className="context-item-desc">Insert empty row at #{(localEntries.findIndex(e => e.id === rowMenuId) + 2)}</span>
                   </div>
-                </button>
-
-                <div className="context-divider" />
-
-                <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
-                  <Trash2 size={16} /> Delete
                 </button>
               </>
             )}

@@ -3339,7 +3339,7 @@ export default function RegisterPage() {
 
 
           {/* Add Record — opens form modal */}
-          {permissions.canEdit && (
+          {permissions.canAdd && (
             <button className="pab-tab-action-btn primary" onClick={() => setShowAddRecordModal(true)}>
               <Plus size={12} /> Add Record
             </button>
@@ -3580,7 +3580,7 @@ export default function RegisterPage() {
               </tr>
             )}
             {displayEntries.length === 0 && !deferredSearch && deferredActiveFilters.length === 0 && columns.length > 0 && [1, 2, 3].map((n) => (
-              <tr key={`mock-${n}`} className="mock" onClick={() => permissions.canEdit ? setShowAddRecordModal(true) : toast.error('Please contact the admin for permission')}>
+              <tr key={`mock-${n}`} className="mock" onClick={() => permissions.canAdd ? setShowAddRecordModal(true) : toast.error('Please contact the admin for permission')}>
                 <td className="serial">{n}</td>
                 {visibleColumns.map((col) => (
                   <td key={col.id}><div className="mock-cell-content">&nbsp;</div></td>
@@ -3596,7 +3596,7 @@ export default function RegisterPage() {
                 calcTypes={calcTypes}
                 calcMenu={calcMenu}
                 onCalcClick={handleCalcCellClick}
-                onAddRecord={() => permissions.canEdit ? addEntryMutation.mutate({}) : toast.error('Please contact the admin for permission')}
+                onAddRecord={() => permissions.canAdd ? addEntryMutation.mutate({}) : toast.error('Please contact the admin for permission')}
                 useColVirtual={useColVirtual}
                 virtualCols={virtualCols}
                 paddingLeft={paddingLeft}

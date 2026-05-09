@@ -126,16 +126,16 @@ async function checkRegisterPermission(userId, registerId, type = 'view') {
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [regRows[0].business_id, userId]);
   if (bizCheck.length > 0) return true;
 
-  const { rows: permRows } = await pool.query('SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2', [userId, registerId]);
+  const { rows: permRows } = await pool.query('SELECT can_view, can_add, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2', [userId, registerId]);
   if (!permRows.length) return false;
 
   const perms = permRows[0];
   
-  // Strict Enforcement: If a user cannot view a register, they intrinsically cannot edit or download it.
-  // This prevents scenarios where admin toggled Edit=On but View=Off, preventing any API bypass.
+  // Strict Enforcement: If a user cannot view a register, they intrinsically cannot do anything else.
   if (!perms.can_view) return false;
 
   if (type === 'view') return perms.can_view;
+  if (type === 'add') return perms.can_add;
   if (type === 'edit') return perms.can_edit;
   if (type === 'download') return perms.can_download;
   return false;
@@ -160,10 +160,8 @@ app.get('/api/admin/stats', async (req, res) => {
 app.get('/api/admin/users', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
-    console.log(`Admin user list fetch: found ${rows.length} users`);
     res.json(rows);
   } catch (err) {
-    console.error('Admin user list error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -178,6 +176,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
         r.name AS "registerName",
         b.name AS "businessName",
         COALESCE(p.can_view, FALSE) AS "canView",
+        COALESCE(p.can_add, FALSE) AS "canAdd",
         COALESCE(p.can_edit, FALSE) AS "canEdit",
         COALESCE(p.can_download, FALSE) AS "canDownload"
       FROM registers r
@@ -194,20 +193,21 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
 });
 
 app.post('/api/admin/permissions', async (req, res) => {
-  const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canEdit, canDownload }, ...]
+  const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canAdd, canEdit, canDownload }, ...]
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     for (const p of permissions) {
       await client.query(`
-        INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO user_permissions (user_id, register_id, can_view, can_add, can_edit, can_download)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (user_id, register_id) DO UPDATE SET
           can_view = EXCLUDED.can_view,
+          can_add = EXCLUDED.can_add,
           can_edit = EXCLUDED.can_edit,
           can_download = EXCLUDED.can_download
-      `, [userId, p.registerId, !!p.canView, !!p.canEdit, !!p.canDownload]);
+      `, [userId, p.registerId, !!p.canView, !!p.canAdd, !!p.canEdit, !!p.canDownload]);
     }
     await client.query('COMMIT');
     res.json({ ok: true });
@@ -328,11 +328,11 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [reg.businessId, req.user.id]);
   const isOwner = bizCheck.length > 0;
   
-  const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
+  const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_add AS "canAdd", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
   const hasPermissions = permRows.length > 0;
 
   if (req.user.isAdmin) {
-    reg.permissions = { canView: true, canEdit: true, canDownload: true };
+    reg.permissions = { canView: true, canAdd: true, canEdit: true, canDownload: true };
   } else if (hasPermissions) {
     reg.permissions = permRows[0];
     if (!reg.permissions.canView) return res.status(403).json({ error: 'Access Denied: View permission required' });
@@ -362,7 +362,7 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
 
   // Grant the creator full access by default
   await pool.query(
-    'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE)',
+    'INSERT INTO user_permissions (user_id, register_id, can_view, can_add, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE, TRUE)',
     [req.user.id, id]
   );
 
@@ -503,8 +503,8 @@ app.post('/api/registers/:id/duplicate', authenticateToken, async (req, res) => 
 // ── ENTRIES ──
 app.post('/api/registers/:regId/entries', authenticateToken, async (req, res) => {
   const regId = req.params.regId;
-  const canEdit = await checkRegisterPermission(req.user.id, regId, 'edit');
-  if (!canEdit) return res.status(403).json({ error: 'Permission denied: Edit access required' });
+  const canAdd = await checkRegisterPermission(req.user.id, regId, 'add');
+  if (!canAdd) return res.status(403).json({ error: 'Permission denied: Add access required' });
 
   const { cells, pageIndex, atIndex } = req.body;
   const id = genId();
