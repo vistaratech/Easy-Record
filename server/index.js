@@ -177,7 +177,9 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
         r.id AS "registerId", 
         r.name AS "registerName",
         b.name AS "businessName",
-        COALESCE(p.can_view, FALSE) AS "canView"
+        COALESCE(p.can_view, FALSE) AS "canView",
+        COALESCE(p.can_edit, FALSE) AS "canEdit",
+        COALESCE(p.can_download, FALSE) AS "canDownload"
       FROM registers r
       INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
@@ -192,18 +194,20 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
 });
 
 app.post('/api/admin/permissions', async (req, res) => {
-  const { userId, permissions } = req.body; // permissions: [{ registerId, canView }, ...]
+  const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canEdit, canDownload }, ...]
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     for (const p of permissions) {
       await client.query(`
-        INSERT INTO user_permissions (user_id, register_id, can_view)
-        VALUES ($1, $2, $3)
+        INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (user_id, register_id) DO UPDATE SET
-          can_view = EXCLUDED.can_view
-      `, [userId, p.registerId, !!p.canView]);
+          can_view = EXCLUDED.can_view,
+          can_edit = EXCLUDED.can_edit,
+          can_download = EXCLUDED.can_download
+      `, [userId, p.registerId, !!p.canView, !!p.canEdit, !!p.canDownload]);
     }
     await client.query('COMMIT');
     res.json({ ok: true });
