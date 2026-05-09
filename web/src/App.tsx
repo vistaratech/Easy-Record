@@ -8,6 +8,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { saveToStorage } from './lib/api';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminRoute from './components/AdminRoute';
 import './index.css';
 import { NotificationProvider, useNotifications } from './lib/NotificationContext';
 
@@ -76,6 +78,14 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={token ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
+        }
+      />
       <Route path="/*" element={<PrivateRoute><HomePage /></PrivateRoute>} />
     </Routes>
   );

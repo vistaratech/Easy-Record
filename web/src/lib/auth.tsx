@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  authLoading: boolean; // Alias for isLoading as requested
   login: (token: string, user: User) => void;
   logout: () => void;
 }
@@ -65,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, authLoading: isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
