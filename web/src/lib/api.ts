@@ -94,7 +94,7 @@ export async function renameFolder(folderId: number, newName: string): Promise<F
 export interface RegisterSummary {
   id: number; businessId: number; folderId?: number; name: string; icon: string; iconColor?: string;
   category: string; template: string; createdAt: string; updatedAt: string; entryCount: number;
-  lastActivity?: string; deletedAt?: string;
+  lastActivity?: string; deletedAt?: string; canView: boolean;
 }
 
 export interface Column {

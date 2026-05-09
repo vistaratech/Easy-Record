@@ -181,7 +181,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
       FROM registers r
       INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL
+      WHERE r.deleted_at IS NULL AND b.owner_id = $1
       ORDER BY b.name, r.name
     `, [userId]);
     res.json(rows);
@@ -284,7 +284,8 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     SELECT DISTINCT
       r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
       r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
-      r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt"
+      r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
+      COALESCE(p.can_view, FALSE) AS "canView"
     FROM registers r
     LEFT JOIN businesses b ON b.id = r.business_id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
