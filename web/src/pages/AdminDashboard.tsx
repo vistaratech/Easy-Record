@@ -96,6 +96,24 @@ export default function AdminDashboard() {
     }
   }
 
+  async function toggleUserRole(isAdmin: boolean) {
+    if (!selectedUser) return;
+    try {
+      setSaving(true);
+      await fetch(`/api/admin/users/${selectedUser.id}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isAdmin })
+      });
+      setSelectedUser({ ...selectedUser, isAdmin });
+      setUsers(users.map(u => u.id === selectedUser.id ? { ...u, isAdmin } : u));
+    } catch (err: any) {
+      alert('Failed to update role: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (error) return <div style={s.centered}><p style={{ color: '#ef4444' }}>Error: {error}</p></div>;
 
   return (
@@ -182,9 +200,29 @@ export default function AdminDashboard() {
                 </div>
                 
                 <div style={s.headerRow}>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <h1 style={s.viewTitle}>{selectedUser.name}</h1>
                     <p style={s.subtitle}>{selectedUser.email}</p>
+                  </div>
+                  <div style={s.roleControl}>
+                    <span style={s.roleLabel}>System Admin Access</span>
+                    <label style={s.switchContainer}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedUser.isAdmin} 
+                        onChange={(e) => toggleUserRole(e.target.checked)}
+                        style={s.hiddenCheckbox}
+                      />
+                      <div style={{ 
+                        ...s.switchTrack, 
+                        ...(selectedUser.isAdmin ? s.switchTrackActive : {}) 
+                      }}>
+                        <div style={{ 
+                          ...s.switchThumb, 
+                          ...(selectedUser.isAdmin ? s.switchThumbActive : {}) 
+                        }} />
+                      </div>
+                    </label>
                   </div>
                 </div>
 
@@ -405,6 +443,55 @@ const s: Record<string, React.CSSProperties> = {
   },
   headerRow: {
     marginBottom: '2rem',
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 20,
+  },
+  roleControl: {
+    background: '#fff',
+    padding: '12px 20px',
+    borderRadius: 12,
+    border: '1px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 16,
+    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+  },
+  roleLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#475569',
+  },
+  switchContainer: {
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  switchTrack: {
+    width: 44,
+    height: 24,
+    background: '#e2e8f0',
+    borderRadius: 12,
+    position: 'relative',
+    transition: 'all 0.2s',
+  },
+  switchTrackActive: {
+    background: '#002D5D',
+  },
+  switchThumb: {
+    width: 18,
+    height: 18,
+    background: '#fff',
+    borderRadius: '50%',
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    transition: 'all 0.2s',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  },
+  switchThumbActive: {
+    left: 23,
   },
   subtitle: {
     color: '#64748b',

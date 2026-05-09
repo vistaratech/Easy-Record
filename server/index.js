@@ -191,6 +191,18 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   }
 });
 
+app.patch('/api/admin/users/:userId/role', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { isAdmin } = req.body;
+    await pool.query('UPDATE users SET is_admin = $1 WHERE id = $2', [!!isAdmin, userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Role update error:', err);
+    res.status(500).json({ error: 'Failed to update user role' });
+  }
+});
+
 app.post('/api/admin/permissions', async (req, res) => {
   const { userId, permissions } = req.body; // permissions: [{ registerId, canView }, ...]
   

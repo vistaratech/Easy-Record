@@ -403,6 +403,7 @@ export async function createRegister(data: {
       width: c.width, summary: c.summary,
     })),
     entries: [], pages: [{ id: 1, name: 'Page 1', index: 0 }], sharedWith: [],
+    canView: true,
   };
   if (newReg.columns.length > 0) {
     for (let i = 0; i < 10; i++) {
@@ -459,6 +460,7 @@ export async function duplicateRegister(registerId: number): Promise<RegisterSum
     const duplicated: RegisterDetail = {
       ...JSON.parse(JSON.stringify(reg)), id: newId, name: `${reg.name} (Copy)`,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: reg.entries.length,
+      canView: true,
     };
     duplicated.columns = duplicated.columns.map((c: Column, i: number) => ({ ...c, id: newId + i + 1, registerId: newId }));
     duplicated.entries = duplicated.entries.map((e: Entry, i: number) => ({ ...e, id: newId + 1000 + i, registerId: newId }));
@@ -2023,5 +2025,13 @@ export async function updateUserPermissions(userId: number, permissions: Partial
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, permissions }),
+  });
+}
+
+export async function toggleUserRole(userId: string | number, isAdmin: boolean): Promise<void> {
+  await fetchApi(`${API}/admin/users/${userId}/role`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isAdmin }),
   });
 }
