@@ -231,7 +231,7 @@ app.get('/api/businesses', authenticateToken, async (req, res) => {
     FROM businesses b
     LEFT JOIN registers r ON r.business_id = b.id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE $2 = TRUE OR b.owner_id = $1 OR p.user_id = $1
+    WHERE $2 = TRUE OR p.can_view = TRUE
   `, [userId, isAdmin]);
   res.json(rows);
 });
@@ -291,8 +291,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
       r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
       CASE 
         WHEN $3 = TRUE THEN TRUE
-        WHEN p.can_view IS NOT NULL THEN p.can_view
-        WHEN b.owner_id = $1 THEN TRUE
+        WHEN p.can_view = TRUE THEN TRUE
         ELSE FALSE
       END AS "hasAccess"
     FROM registers r
@@ -300,7 +299,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
     WHERE r.business_id = $2 
       AND r.deleted_at IS NULL
-      AND ($3 = TRUE OR b.owner_id = $1 OR p.user_id = $1)
+      AND ($3 = TRUE OR p.can_view = TRUE)
   `, [userId, businessId, isAdmin]);
 
   res.json(rows);
@@ -332,13 +331,13 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
   const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
   const hasPermissions = permRows.length > 0;
 
-  if (req.user.isAdmin || isOwner) {
+  if (req.user.isAdmin) {
     reg.permissions = { canView: true, canEdit: true, canDownload: true };
   } else if (hasPermissions) {
     reg.permissions = permRows[0];
     if (!reg.permissions.canView) return res.status(403).json({ error: 'Access Denied: View permission required' });
   } else {
-    // No explicit permission and not owner/admin
+    // No explicit permission
     return res.status(403).json({ error: 'Forbidden' });
   }
 
@@ -360,6 +359,12 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
 
   await pool.query(`INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
     [id, businessId, folderId || null, name, icon || 'file-text', iconColor || null, category || 'general', template || name, JSON.stringify(cols), JSON.stringify(pages), cols.length > 0 ? 10 : 0]);
+
+  // Grant the creator full access by default
+  await pool.query(
+    'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE)',
+    [req.user.id, id]
+  );
 
   // Create 10 default empty rows if columns exist
   if (cols.length > 0) {
