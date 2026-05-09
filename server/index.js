@@ -116,14 +116,17 @@ const adminOnly = async (req, res, next) => {
 
 // Permission check helper
 async function checkRegisterPermission(userId, registerId, type = 'view') {
-  const { rows: regRows } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [registerId]);
-  if (!regRows.length) return false;
-  
   const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [userId]);
   if (!userRows.length) return false;
   const { is_admin: isAdmin, can_edit: hasGlobalEdit } = userRows[0];
-  
+
   if (isAdmin) return true;
+  
+  // If editing/downloading and global edit is disabled, deny immediately
+  if ((type === 'edit' || type === 'download') && !hasGlobalEdit) return false;
+
+  const { rows: regRows } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [registerId]);
+  if (!regRows.length) return false;
 
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [regRows[0].business_id, userId]);
   if (bizCheck.length > 0) return true;
@@ -132,8 +135,6 @@ async function checkRegisterPermission(userId, registerId, type = 'view') {
   if (!permRows.length) return false;
 
   const perms = permRows[0];
-  
-  // Strict Enforcement: If a user cannot view a register, they intrinsically cannot edit or download it.
   if (!perms.can_view) return false;
 
   if (type === 'view') return perms.can_view;
@@ -368,7 +369,7 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
   const isOwner = bizCheck.length > 0;
 
-  if (!isAdmin && !isOwner && !canCreate) return res.status(403).json({ error: 'Permission denied: Create access required' });
+  if (!isAdmin && !isOwner && !canCreate) return res.status(403).json({ error: 'Permission denied: Edit access required' });
   const id = genId();
   const cols = (columns || []).map((c, i) => ({ id: id + i + 1, registerId: id, name: c.name, type: c.type, position: i, dropdownOptions: c.dropdownOptions, formula: c.formula, width: c.width, summary: c.summary }));
   const pages = [{ id: 1, name: 'Page 1', index: 0 }];
@@ -422,8 +423,28 @@ app.post('/api/registers/:id/restore', authenticateToken, async (req, res) => {
 
 app.put('/api/registers/:id', authenticateToken, async (req, res) => {
   const id = req.params.id;
-  if (!(await canEdit(req.user.id, id))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
   const reg = req.body;
+
+  // Check if register exists
+  const { rows: existing } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [id]);
+  
+  if (existing.length > 0) {
+    // Existing register: Use standard permission check
+    if (!(await canEdit(req.user.id, id))) {
+      return res.status(403).json({ error: 'Permission denied: Edit access required' });
+    }
+  } else {
+    // New register: Check global creation permission
+    const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
+    const { is_admin: isAdmin, can_edit: hasGlobalEdit } = userRows[0] || {};
+    
+    const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [reg.businessId, req.user.id]);
+    const isOwner = bizCheck.length > 0;
+    
+    if (!isAdmin && !isOwner && !hasGlobalEdit) {
+      return res.status(403).json({ error: 'Permission denied: Edit access required' });
+    }
+  }
   
   await pool.query(`
     INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
