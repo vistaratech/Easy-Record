@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Share2, Download, Bookmark, X } from 'lucide-react';
+import { Download, Bookmark, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface SavedTemplate {
@@ -11,12 +11,11 @@ interface SavedTemplate {
 
 interface RegisterHeaderProps {
   register: any;
-  setShareModal: (open: boolean) => void;
   handleOpenExport: () => void;
   permissions?: { canView: boolean; canEdit: boolean; canDownload: boolean };
 }
 
-export function RegisterHeader({ register, setShareModal, handleOpenExport, permissions }: RegisterHeaderProps) {
+export function RegisterHeader({ register, handleOpenExport, permissions }: RegisterHeaderProps) {
   const [saveTemplateModal, setSaveTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const templateInputRef = useRef<HTMLInputElement>(null);

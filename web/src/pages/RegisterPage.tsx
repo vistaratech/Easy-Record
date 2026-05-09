@@ -3284,7 +3284,6 @@ export default function RegisterPage() {
         </div>
         <RegisterHeader 
           register={register} 
-          setShareModal={setShareModal} 
           handleOpenExport={() => {
             if (!permissions.canDownload) {
               toast.error('Download permission denied');
