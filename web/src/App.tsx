@@ -9,7 +9,6 @@ import { saveToStorage } from './lib/api';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import AdminDashboard from './pages/AdminDashboard';
-import AdminRoute from './components/AdminRoute';
 import './index.css';
 import { NotificationProvider, useNotifications } from './lib/NotificationContext';
 
