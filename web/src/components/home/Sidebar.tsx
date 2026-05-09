@@ -62,7 +62,7 @@ export const Sidebar = memo(function Sidebar({
   const businessId = businesses?.[0]?.id;
   const deferredSearch = useDeferredValue(search);
   const { user, logout } = useAuth();
-  const canCreate = user?.isAdmin || user?.canCreateRegisters;
+  const canCreate = user?.isAdmin || user?.canEdit;
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders', businessId],

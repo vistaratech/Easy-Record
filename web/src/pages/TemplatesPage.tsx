@@ -42,7 +42,7 @@ export default function TemplatesPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user && !user.isAdmin && !user.canCreateTemplates) {
+    if (user && !user.isAdmin && !user.canEdit) {
       navigate('/');
     }
   }, [user, navigate]);

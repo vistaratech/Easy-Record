@@ -14,7 +14,7 @@ interface DashboardContentProps {
 export function DashboardContent({ filtered, excelMutation, handleFileUpload, onInputFolder }: DashboardContentProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canCreate = user?.isAdmin || user?.canCreateRegisters;
+  const canCreate = user?.isAdmin || user?.canEdit;
 
   if (!filtered || filtered.length === 0) {
     return (

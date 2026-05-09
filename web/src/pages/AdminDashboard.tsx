@@ -101,11 +101,11 @@ export default function AdminDashboard() {
     }
   }
 
-  async function toggleGlobalPermission(field: 'canCreateRegisters' | 'canCreateTemplates') {
+  async function toggleGlobalEdit() {
     if (!selectedUserId || !selectedUser) return;
 
     const updatedUser = { ...selectedUser };
-    updatedUser[field] = !updatedUser[field];
+    updatedUser.canEdit = !updatedUser.canEdit;
 
     // Optimistic update
     setUsers(prev => prev.map(u => u.id === selectedUserId ? updatedUser : u));
@@ -113,8 +113,7 @@ export default function AdminDashboard() {
     try {
       setSaving(true);
       await updateUserPermissions(selectedUserId, [], {
-        canCreateRegisters: updatedUser.canCreateRegisters || false,
-        canCreateTemplates: updatedUser.canCreateTemplates || false
+        canEdit: updatedUser.canEdit || false
       });
     } catch (err) {
       // Rollback
@@ -265,29 +264,14 @@ export default function AdminDashboard() {
               <div style={s.globalGrid}>
                 <div style={s.globalCard}>
                   <div style={s.globalInfo}>
-                    <div style={s.globalLabel}>Create Registers</div>
-                    <div style={s.globalDesc}>Allows user to create new register files from scratch.</div>
+                    <div style={s.globalLabel}>Global Edit Access</div>
+                    <div style={s.globalDesc}>Enables creation of registers, templates, and editing existing data.</div>
                   </div>
                   <label style={s.switch}>
                     <input 
                       type="checkbox" 
-                      checked={selectedUser.canCreateRegisters} 
-                      onChange={() => toggleGlobalPermission('canCreateRegisters')}
-                    />
-                    <span style={s.slider}></span>
-                  </label>
-                </div>
-
-                <div style={s.globalCard}>
-                  <div style={s.globalInfo}>
-                    <div style={s.globalLabel}>Create Templates</div>
-                    <div style={s.globalDesc}>Allows user to create new registers from pre-defined templates.</div>
-                  </div>
-                  <label style={s.switch}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedUser.canCreateTemplates} 
-                      onChange={() => toggleGlobalPermission('canCreateTemplates')}
+                      checked={selectedUser.canEdit} 
+                      onChange={toggleGlobalEdit}
                     />
                     <span style={s.slider}></span>
                   </label>

@@ -93,7 +93,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = rows[0];
-    res.json({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, canCreateRegisters: user.can_create_registers, canCreateTemplates: user.can_create_templates, createdAt: user.created_at });
+    res.json({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, canEdit: user.can_edit, canCreateRegisters: user.can_create_registers, canCreateTemplates: user.can_create_templates, createdAt: user.created_at });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -119,8 +119,10 @@ async function checkRegisterPermission(userId, registerId, type = 'view') {
   const { rows: regRows } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [registerId]);
   if (!regRows.length) return false;
   
-  const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
-  const isAdmin = userRows.length > 0 && userRows[0].is_admin;
+  const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [userId]);
+  if (!userRows.length) return false;
+  const { is_admin: isAdmin, can_edit: hasGlobalEdit } = userRows[0];
+  
   if (isAdmin) return true;
 
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [regRows[0].business_id, userId]);
@@ -132,11 +134,10 @@ async function checkRegisterPermission(userId, registerId, type = 'view') {
   const perms = permRows[0];
   
   // Strict Enforcement: If a user cannot view a register, they intrinsically cannot edit or download it.
-  // This prevents scenarios where admin toggled Edit=On but View=Off, preventing any API bypass.
   if (!perms.can_view) return false;
 
   if (type === 'view') return perms.can_view;
-  if (type === 'edit') return perms.can_edit;
+  if (type === 'edit') return hasGlobalEdit && perms.can_edit;
   if (type === 'download') return perms.can_download;
   return false;
 }
@@ -159,7 +160,7 @@ app.get('/api/admin/stats', async (req, res) => {
 
 app.get('/api/admin/users', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", can_create_registers AS "canCreateRegisters", can_create_templates AS "canCreateTemplates", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
+    const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", can_edit AS "canEdit", can_create_registers AS "canCreateRegisters", can_create_templates AS "canCreateTemplates", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
     console.log(`Admin user list fetch: found ${rows.length} users`);
     res.json(rows);
   } catch (err) {
@@ -200,10 +201,12 @@ app.post('/api/admin/permissions', async (req, res) => {
   try {
     await client.query('BEGIN');
     if (req.body.globalPermissions) {
-      const { canCreateRegisters, canCreateTemplates } = req.body.globalPermissions;
+      const { canEdit, canCreateRegisters, canCreateTemplates } = req.body.globalPermissions;
+      // If canEdit is provided, we use it for creation perms as well based on the new logic
+      const val = !!canEdit;
       await client.query(`
-        UPDATE users SET can_create_registers = $1, can_create_templates = $2 WHERE id = $3
-      `, [!!canCreateRegisters, !!canCreateTemplates, userId]);
+        UPDATE users SET can_edit = $1, can_create_registers = $1, can_create_templates = $1 WHERE id = $2
+      `, [val, userId]);
     }
     for (const p of (permissions || [])) {
       await client.query(`
@@ -357,10 +360,10 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/registers', authenticateToken, async (req, res) => {
   const { businessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
-  const { rows: userCheck } = await pool.query('SELECT is_admin, can_create_registers FROM users WHERE id = $1', [req.user.id]);
+  const { rows: userCheck } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
   const user = userCheck[0];
   const isAdmin = user?.is_admin;
-  const canCreate = user?.can_create_registers;
+  const canCreate = user?.can_edit;
 
   const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
   const isOwner = bizCheck.length > 0;
