@@ -301,7 +301,6 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
       r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
       CASE 
         WHEN $3 = TRUE THEN TRUE
-        WHEN b.owner_id = $1 THEN TRUE
         WHEN p.can_view = TRUE THEN TRUE
         ELSE FALSE
       END AS "hasAccess"
@@ -310,7 +309,7 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
     WHERE r.business_id = $2 
       AND r.deleted_at IS NULL
-      AND ($3 = TRUE OR p.can_view = TRUE OR b.owner_id = $1)
+      AND ($3 = TRUE OR p.can_view = TRUE)
   `, [userId, businessId, isAdmin]);
 
   res.json(rows);
