@@ -173,16 +173,20 @@ app.get('/api/admin/users', async (req, res) => {
 app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   try {
     const { userId } = req.params;
+    // Get registers that belong to businesses owned by the selected user
     const { rows } = await pool.query(`
-      SELECT r.id AS "registerId", r.name AS "registerName", b.name AS "businessName",
-           COALESCE(p.can_view, FALSE) AS "canView", 
-           COALESCE(p.can_edit, FALSE) AS "canEdit", 
-           COALESCE(p.can_download, FALSE) AS "canDownload"
-    FROM registers r
-    JOIN businesses b ON r.business_id = b.id
-    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE r.deleted_at IS NULL
-    ORDER BY b.name, r.name
+      SELECT 
+        r.id AS "registerId", 
+        r.name AS "registerName",
+        b.name AS "businessName",
+        COALESCE(p.can_view, FALSE) AS "canView",
+        COALESCE(p.can_edit, FALSE) AS "canEdit",
+        COALESCE(p.can_download, FALSE) AS "canDownload"
+      FROM registers r
+      INNER JOIN businesses b ON b.id = r.business_id
+      LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+      WHERE r.deleted_at IS NULL AND b.owner_id = $1
+      ORDER BY b.name, r.name
     `, [userId]);
     res.json(rows);
   } catch (err) {
