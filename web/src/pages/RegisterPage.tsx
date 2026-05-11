@@ -3288,7 +3288,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="content-area">
+    <div className={`content-area ${!permissions.canEdit ? 'register-read-only' : ''}`}>
       {/* ── Header ── */}
       <div className="register-header">
         <div className="register-header-left">

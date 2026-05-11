@@ -8934,6 +8934,27 @@ body.modal-open {
   background-color: #f8fafc;
 }
 
+/* Global Read-Only state for the whole page */
+.register-read-only {
+  filter: grayscale(0.4) contrast(0.9) brightness(0.96);
+  cursor: not-allowed !important;
+  user-select: none;
+}
+
+.register-read-only *,
+.register-read-only input,
+.register-read-only button,
+.register-read-only .cell-inner-wrapper {
+  cursor: not-allowed !important;
+}
+
+.register-read-only .read-only-badge {
+  background: var(--navy);
+  color: white;
+  opacity: 1;
+  filter: none; /* Keep badge sharp */
+}
+
 .cell-image-wrap.readonly {
   filter: grayscale(0.6) opacity(0.7);
 }
