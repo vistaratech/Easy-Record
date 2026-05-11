@@ -117,29 +117,18 @@ const adminOnly = async (req, res, next) => {
 // Permission check helper
 async function checkRegisterPermission(userId, registerId, type = 'view') {
   const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [userId]);
-  if (!userRows.length) return false;
-  const { is_admin: isAdmin, can_edit: hasGlobalEdit } = userRows[0];
+  // Strict permission check: only honor user_permissions table
+  const { rows: perms } = await pool.query(
+    'SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2',
+    [userId, registerId]
+  );
 
-  if (isAdmin) return true;
+  if (perms.length === 0) return false;
   
-  // If editing/downloading and global edit is disabled, deny immediately
-  if ((type === 'edit' || type === 'download') && !hasGlobalEdit) return false;
-
-  const { rows: regRows } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [registerId]);
-  if (!regRows.length) return false;
-
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [regRows[0].business_id, userId]);
-  if (bizCheck.length > 0) return true;
-
-  const { rows: permRows } = await pool.query('SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2', [userId, registerId]);
-  if (!permRows.length) return false;
-
-  const perms = permRows[0];
-  if (!perms.can_view) return false;
-
-  if (type === 'view') return perms.can_view;
-  if (type === 'edit') return hasGlobalEdit && perms.can_edit;
-  if (type === 'download') return perms.can_download;
+  const p = perms[0];
+  if (type === 'view') return p.can_view;
+  if (type === 'edit') return p.can_edit;
+  if (type === 'download') return p.can_download;
   return false;
 }
 
@@ -249,8 +238,9 @@ app.get('/api/businesses', authenticateToken, async (req, res) => {
     FROM businesses b
     LEFT JOIN registers r ON r.business_id = b.id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE $2 = TRUE OR p.can_view = TRUE
-  `, [userId, isAdmin]);
+    WHERE p.can_view = TRUE
+    ORDER BY b.name
+  `, [userId]);
   res.json(rows);
 });
 app.post('/api/businesses', authenticateToken, async (req, res) => {
@@ -282,8 +272,8 @@ app.get('/api/folders', authenticateToken, async (req, res) => {
     INNER JOIN businesses b ON b.id = f.business_id
     LEFT JOIN registers r ON r.folder_id = f.id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE b.owner_id = $1 OR p.can_view = TRUE OR $2 = TRUE
-  `, [userId, req.user.isAdmin || false]);
+    WHERE p.can_view = TRUE
+  `, [userId]);
   res.json(rows);
 });
 app.post('/api/folders', authenticateToken, async (req, res) => {
@@ -324,7 +314,6 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
       r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
       r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
       CASE 
-        WHEN $3 = TRUE THEN TRUE
         WHEN p.can_view = TRUE THEN TRUE
         ELSE FALSE
       END AS "hasAccess"
@@ -333,8 +322,8 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
     WHERE ($2::bigint IS NULL OR r.business_id = $2)
       AND r.deleted_at IS NULL
-      AND ($3 = TRUE OR p.can_view = TRUE)
-  `, [userId, businessId || null, isAdmin]);
+      AND (p.can_view = TRUE)
+  `, [userId, businessId || null]);
 
   res.json(rows);
 });
@@ -358,21 +347,25 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
     created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [regId]);
   if (!regRows.length) return res.status(404).json({ error: 'Register not found' });
   const reg = regRows[0];
-  // Access Control Logic
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [reg.businessId, req.user.id]);
-  const isOwner = bizCheck.length > 0;
   
-  const { rows: permRows } = await pool.query('SELECT can_view AS "canView", can_edit AS "canEdit", can_download AS "canDownload" FROM user_permissions WHERE user_id=$1 AND register_id=$2', [req.user.id, regId]);
-  const hasPermissions = permRows.length > 0;
-
-  if (req.user.isAdmin) {
-    reg.permissions = { canView: true, canEdit: true, canDownload: true };
-  } else if (hasPermissions) {
-    reg.permissions = permRows[0];
-    if (!reg.permissions.canView) return res.status(403).json({ error: 'Access Denied: View permission required' });
+  const { rows: perms } = await pool.query(
+    'SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2',
+    [req.user.id, regId]
+  );
+  
+  const hasPermissions = perms.length > 0;
+  
+  if (hasPermissions) {
+    const p = perms[0];
+    if (!p.can_view) return res.status(403).json({ error: 'Forbidden: View access denied' });
+    reg.permissions = {
+      canView: p.can_view,
+      canEdit: p.can_edit,
+      canDownload: p.can_download
+    };
   } else {
-    // No explicit permission
-    return res.status(403).json({ error: 'Forbidden' });
+    // Even Admins/Owners need an explicit permission record now for visibility consistency
+    return res.status(403).json({ error: 'Forbidden: No access record found' });
   }
 
   const { rows: entryRows } = await pool.query(`SELECT id, register_id AS "registerId", row_number AS "rowNumber", cells, cell_styles AS "cellStyles", page_index AS "pageIndex", created_at AS "createdAt" FROM entries WHERE register_id=$1 ORDER BY row_number`, [regId]);
@@ -668,15 +661,34 @@ app.get('/api/history', authenticateToken, async (req, res) => {
 // ── SEARCH ──
 app.get('/api/search', authenticateToken, async (req, res) => {
   const { businessId, q } = req.query;
+  const userId = req.user.id;
   if (!q) return res.json([]);
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
-  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
 
   const term = `%${q}%`;
   // Search register names
-  const { rows: regMatches } = await pool.query(`SELECT id AS "registerId", name AS "registerName", folder_id AS "folderId" FROM registers WHERE business_id=$1 AND deleted_at IS NULL AND name ILIKE $2 LIMIT 20`, [businessId, term]);
+  const { rows: regMatches } = await pool.query(`
+    SELECT r.id AS "registerId", r.name AS "registerName", r.folder_id AS "folderId" 
+    FROM registers r
+    INNER JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+    WHERE ($3::bigint IS NULL OR r.business_id = $3) 
+      AND r.deleted_at IS NULL 
+      AND r.name ILIKE $2 
+      AND p.can_view = TRUE
+    LIMIT 20
+  `, [userId, term, businessId || null]);
+
   // Search entry cells (JSONB text search)
-  const { rows: entryMatches } = await pool.query(`SELECT e.id AS "entryId", e.register_id AS "registerId", r.name AS "registerName", r.folder_id AS "folderId", e.row_number AS "rowNumber", e.page_index AS "pageIndex", e.cells FROM entries e JOIN registers r ON r.id=e.register_id WHERE r.business_id=$1 AND r.deleted_at IS NULL AND e.cells::text ILIKE $2 LIMIT 50`, [businessId, term]);
+  const { rows: entryMatches } = await pool.query(`
+    SELECT e.id AS "entryId", e.register_id AS "registerId", r.name AS "registerName", r.folder_id AS "folderId", e.row_number AS "rowNumber", e.page_index AS "pageIndex", e.cells 
+    FROM entries e 
+    JOIN registers r ON r.id=e.register_id 
+    INNER JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+    WHERE ($3::bigint IS NULL OR r.business_id = $3) 
+      AND r.deleted_at IS NULL 
+      AND e.cells::text ILIKE $2 
+      AND p.can_view = TRUE
+    LIMIT 50
+  `, [userId, term, businessId || null]);
   const results = [
     ...regMatches.map(r => ({ ...r, entryId: -1, rowNumber: -1, matchedText: r.registerName })),
     ...entryMatches.map(e => {

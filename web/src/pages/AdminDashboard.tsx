@@ -171,7 +171,10 @@ export default function AdminDashboard() {
                     onClick={() => handleUserSelect(user)}
                   >
                     <div style={s.dot} />
-                    <span>{user.name || user.email}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: selectedUserId === user.id ? 600 : 400 }}>{user.name || user.email}</span>
+                      <span style={{ fontSize: '10px', opacity: 0.6, textTransform: 'uppercase' }}>{user.isAdmin ? 'Admin' : 'User'}</span>
+                    </div>
                   </button>
                 ))}
               </div>
