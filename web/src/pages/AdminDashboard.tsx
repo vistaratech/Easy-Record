@@ -66,12 +66,6 @@ export default function AdminDashboard() {
     }
   }, [user, authLoading, navigate]);
 
-  useEffect(() => {
-    if (user?.isAdmin) {
-      fetchInitialData();
-    }
-  }, [user, fetchInitialData]);
-
   const handleUserSelect = React.useCallback(async (user: User) => {
     setSelectedUserId(user.id);
     setPermLoading(true);
@@ -108,6 +102,12 @@ export default function AdminDashboard() {
     }
   }, [selectedUserId, handleUserSelect]);
 
+  useEffect(() => {
+    if (user?.isAdmin) {
+      fetchInitialData();
+    }
+  }, [user, fetchInitialData]);
+
   if (authLoading || (!user || !user.isAdmin)) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
@@ -141,7 +141,7 @@ export default function AdminDashboard() {
     setColumnsLoading(true);
     try {
       const reg = await getRegister(regId);
-      setRegColumns(reg.template || []);
+      setRegColumns(reg.columns || []);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load columns');
@@ -468,7 +468,7 @@ export default function AdminDashboard() {
                                 </button>
                               </td>
                               <td style={s.td}>
-                                <div style={s.regRow} onClick={() => handleExpandRegister(p.registerId)} style={{ cursor: 'pointer' }}>
+                                <div onClick={() => handleExpandRegister(p.registerId)} style={{ ...s.regRow, cursor: 'pointer' }}>
                                   <div style={s.iconCircle}>
                                     <FileText size={14} color="#2563eb" />
                                   </div>
