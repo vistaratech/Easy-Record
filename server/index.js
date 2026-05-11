@@ -395,43 +395,80 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/registers', authenticateToken, async (req, res) => {
-  const { businessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
-  const { rows: userCheck } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
-  const user = userCheck[0];
-  const isAdmin = user?.is_admin;
-  const canCreate = user?.can_edit;
+  try {
+    const { businessId: reqBusinessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
+    
+    // 1. Resolve User Permissions
+    const { rows: userCheck } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
+    const user = userCheck[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const isAdmin = user.is_admin;
+    const canCreateGlobal = user.can_edit;
 
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
-  const isOwner = bizCheck.length > 0;
-
-  if (!isAdmin && !isOwner && !canCreate) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-  const id = genId();
-  const cols = (columns || []).map((c, i) => ({ id: id + i + 1, registerId: id, name: c.name, type: c.type, position: i, dropdownOptions: c.dropdownOptions, formula: c.formula, width: c.width, summary: c.summary }));
-  const pages = [{ id: 1, name: 'Page 1', index: 0 }];
-
-  await pool.query(`INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [id, businessId, folderId || null, name, icon || 'file-text', iconColor || null, category || 'general', template || name, JSON.stringify(cols), JSON.stringify(pages), cols.length > 0 ? 10 : 0]);
-
-  // Grant the creator full access by default
-  await pool.query(
-    'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE)',
-    [req.user.id, id]
-  );
-
-  // Create 10 default empty rows if columns exist
-  if (cols.length > 0) {
-    const values = [];
-    const params = [];
-    for (let i = 0; i < 10; i++) {
-      const eId = id + 5000 + i;
-      const offset = i * 5;
-      values.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5})`);
-      params.push(eId, id, i + 1, '{}', 0);
+    // 2. Resolve Business ID (if missing, find one the user owns)
+    let businessId = reqBusinessId;
+    if (!businessId) {
+      const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
+      if (bizRows.length > 0) businessId = bizRows[0].id;
     }
-    await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,page_index) VALUES ${values.join(',')}`, params);
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'A valid business is required to create a register.' });
+    }
+
+    // 3. Permission Check
+    const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+    const isOwner = bizCheck.length > 0;
+
+    if (!isAdmin && !isOwner && !canCreateGlobal) {
+      return res.status(403).json({ error: 'Permission denied: Creation privilege required.' });
+    }
+
+    const id = genId();
+    const cols = (columns || []).map((c, i) => ({ 
+      id: id + i + 1, 
+      registerId: id, 
+      name: c.name, 
+      type: c.type, 
+      position: i, 
+      dropdownOptions: c.dropdownOptions, 
+      formula: c.formula, 
+      width: c.width, 
+      summary: c.summary 
+    }));
+    const pages = [{ id: 1, name: 'Page 1', index: 0 }];
+
+    await pool.query(
+      `INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [id, businessId, folderId || null, name, icon || 'file-text', iconColor || null, category || 'general', template || name, JSON.stringify(cols), JSON.stringify(pages), cols.length > 0 ? 10 : 0]
+    );
+
+    // Grant the creator full access by default
+    await pool.query(
+      'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE)',
+      [req.user.id, id]
+    );
+
+    // Create 10 default empty rows if columns exist
+    if (cols.length > 0) {
+      const values = [];
+      const params = [];
+      for (let i = 0; i < 10; i++) {
+        const eId = id + 5000 + i;
+        const offset = i * 6;
+        values.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
+        params.push(eId, id, i + 1, '{}', '{}', 0);
+      }
+      await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${values.join(',')}`, params);
+    }
+
+    await logAction(pool, businessId, 'Create Register', `Created register: ${name}`, { registerId: id, registerName: name, userName: req.user.name });
+    res.json({ id, businessId, folderId, name, icon: icon || 'file-text', iconColor, category: category || 'general', template: template || name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: cols.length > 0 ? 10 : 0 });
+  } catch (err) {
+    console.error('Register creation error:', err);
+    res.status(500).json({ error: 'Internal server error during register creation' });
   }
-  await logAction(pool, businessId, 'Create Register', `Created register: ${name}`, { registerId: id, registerName: name, userName: req.user.name });
-  res.json({ id, businessId, folderId, name, icon: icon || 'file-text', iconColor, category: category || 'general', template: template || name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: cols.length > 0 ? 10 : 0 });
 });
 
 app.delete('/api/registers/:id', authenticateToken, async (req, res) => {
@@ -457,79 +494,100 @@ app.post('/api/registers/:id/restore', authenticateToken, async (req, res) => {
 });
 
 app.put('/api/registers/:id', authenticateToken, async (req, res) => {
-  const id = req.params.id;
-  const reg = req.body;
+  try {
+    const id = req.params.id;
+    const reg = req.body;
 
-  // Check if register exists
-  const { rows: existing } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [id]);
-  
-  if (existing.length > 0) {
-    // Existing register: Use standard permission check
-    if (!(await canEdit(req.user.id, id))) {
-      return res.status(403).json({ error: 'Permission denied: Edit access required' });
-    }
-  } else {
-    // New register: Check global creation permission
-    const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
-    const { is_admin: isAdmin, can_edit: hasGlobalEdit } = userRows[0] || {};
-    
-    const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [reg.businessId, req.user.id]);
-    const isOwner = bizCheck.length > 0;
-    
-    if (!isAdmin && !isOwner && !hasGlobalEdit) {
-      return res.status(403).json({ error: 'Permission denied: Edit access required' });
+    // 1. Resolve Business ID (if missing, try to find one the user owns)
+    let businessId = reg.businessId;
+    if (!businessId) {
+      const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
+      if (bizRows.length > 0) businessId = bizRows[0].id;
     }
 
-    // Grant the creator full access by default for new registers
-    await pool.query(
-      'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING',
-      [req.user.id, id]
-    );
-  }
-  
-  await pool.query(`
-    INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
-    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
-    ON CONFLICT (id) DO UPDATE SET
-      business_id=EXCLUDED.business_id,
-      folder_id=EXCLUDED.folder_id,
-      name=EXCLUDED.name,
-      icon=EXCLUDED.icon,
-      icon_color=EXCLUDED.icon_color,
-      category=EXCLUDED.category,
-      template=EXCLUDED.template,
-      columns=EXCLUDED.columns,
-      pages=EXCLUDED.pages,
-      share_link=EXCLUDED.share_link,
-      shared_with=EXCLUDED.shared_with,
-      deleted_items=EXCLUDED.deleted_items,
-      entry_count=EXCLUDED.entry_count,
-      updated_at=NOW()
-  `, [
-    id, reg.businessId, reg.folderId || null, reg.name, reg.icon || 'file-text', reg.iconColor || null,
-    reg.category || 'general', reg.template || reg.name, JSON.stringify(reg.columns || []),
-    JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), reg.shareLink || null,
-    JSON.stringify(reg.sharedWith || []), JSON.stringify(reg.deletedItems || []), reg.entryCount || (reg.entries ? reg.entries.length : 0)
-  ]);
+    if (!businessId) {
+      return res.status(400).json({ error: 'A valid business is required to save a register.' });
+    }
 
-  if (reg.entries && reg.entries.length > 0) {
-    await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
-    const chunkSize = 1000;
-    for (let i = 0; i < reg.entries.length; i += chunkSize) {
-      const chunk = reg.entries.slice(i, i + chunkSize);
-      const cValues = [];
-      const cParams = [];
-      for (let j = 0; j < chunk.length; j++) {
-         const e = chunk[j];
-         const offset = j * 6;
-         cValues.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
-         cParams.push(e.id, id, e.rowNumber || (i+j+1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
+    // 2. Check Permissions
+    const { rows: existing } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [id]);
+    
+    if (existing.length > 0) {
+      // Existing register: Use standard permission check
+      if (!(await canEdit(req.user.id, id))) {
+        return res.status(403).json({ error: 'Permission denied: Edit access required' });
       }
-      await pool.query(`INSERT INTO entries(id, register_id, row_number, cells, cell_styles, page_index) VALUES ${cValues.join(',')}`, cParams);
-    }
-  }
+    } else {
+      // New register: Check global creation permission
+      const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
+      const user = userRows[0];
+      const isAdmin = user?.is_admin;
+      const canCreateGlobal = user?.can_edit;
+      
+      const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
+      const isOwner = bizCheck.length > 0;
+      
+      if (!isAdmin && !isOwner && !canCreateGlobal) {
+        return res.status(403).json({ error: 'Permission denied: Creation privilege required.' });
+      }
 
-  res.json({ ok: true });
+      // Grant the creator full access by default for new registers
+      await pool.query(
+        'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING',
+        [req.user.id, id]
+      );
+    }
+    
+    // 3. Upsert Register
+    await pool.query(`
+      INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        business_id=EXCLUDED.business_id,
+        folder_id=EXCLUDED.folder_id,
+        name=EXCLUDED.name,
+        icon=EXCLUDED.icon,
+        icon_color=EXCLUDED.icon_color,
+        category=EXCLUDED.category,
+        template=EXCLUDED.template,
+        columns=EXCLUDED.columns,
+        pages=EXCLUDED.pages,
+        share_link=EXCLUDED.share_link,
+        shared_with=EXCLUDED.shared_with,
+        deleted_items=EXCLUDED.deleted_items,
+        entry_count=EXCLUDED.entry_count,
+        updated_at=NOW()
+    `, [
+      id, businessId, reg.folderId || null, reg.name, reg.icon || 'file-text', reg.iconColor || null,
+      reg.category || 'general', reg.template || reg.name, JSON.stringify(reg.columns || []),
+      JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), reg.shareLink || null,
+      JSON.stringify(reg.sharedWith || []), JSON.stringify(reg.deletedItems || []), reg.entryCount || (reg.entries ? reg.entries.length : 0)
+    ]);
+
+    // 4. Upsert Entries (if provided)
+    if (reg.entries && reg.entries.length > 0) {
+      await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
+      const chunkSize = 1000;
+      for (let i = 0; i < reg.entries.length; i += chunkSize) {
+        const chunk = reg.entries.slice(i, i + chunkSize);
+        const cValues = [];
+        const cParams = [];
+        for (let j = 0; j < chunk.length; j++) {
+           const e = chunk[j];
+           const offset = j * 6;
+           cValues.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
+           cParams.push(e.id, id, e.rowNumber || (i + j + 1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
+        }
+        await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${cValues.join(',')}`, cParams);
+      }
+    }
+
+    await logAction(pool, businessId, 'Update Register', `Updated register: ${reg.name}`, { registerId: id });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Register save error:', err);
+    res.status(500).json({ error: 'Internal server error during register save' });
+  }
 });
 
 app.patch('/api/registers/:id', authenticateToken, async (req, res) => {

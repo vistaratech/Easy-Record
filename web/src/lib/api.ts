@@ -385,7 +385,7 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
 }
 
 export async function createRegister(data: {
-  businessId: number; folderId?: number; name: string; icon?: string; iconColor?: string;
+  businessId?: number; folderId?: number; name: string; icon?: string; iconColor?: string;
   category?: string; template?: string;
   columns?: Array<{ 
     name: string; 
@@ -398,7 +398,7 @@ export async function createRegister(data: {
 }): Promise<RegisterSummary> {
   const newId = generateId();
   const newReg: RegisterDetail = {
-    id: newId, businessId: data.businessId, folderId: data.folderId, name: data.name,
+    id: newId, businessId: data.businessId || 0, folderId: data.folderId, name: data.name,
     icon: data.icon || 'file-text', iconColor: data.iconColor,
     category: data.category || 'general', template: data.template || data.name,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: 0,
@@ -420,7 +420,9 @@ export async function createRegister(data: {
   }
   // Use saveRegDocImmediate which handles chunked entry storage automatically
   await saveRegDocImmediate(newReg);
-  await logAction(data.businessId, 'Create Register', `Created register: ${data.name}`, { registerId: newId, registerName: data.name });
+  if (data.businessId) {
+    await logAction(data.businessId, 'Create Register', `Created register: ${data.name}`, { registerId: newId, registerName: data.name });
+  }
   return newReg;
 }
 

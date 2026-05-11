@@ -123,7 +123,6 @@ export default function TemplatesPage() {
               count={cat.id === 'blank' ? 0 : (TEMPLATES[cat.id] || []).length} 
               onClick={() => {
                 if (cat.id === 'blank') {
-                  if (!businessId) return;
                   setCreatingTemplate('Blank Register');
                   createMutation.mutate({
                     name: 'Blank Register',
@@ -146,7 +145,6 @@ export default function TemplatesPage() {
         categoryData={categoryData} subTemplates={subTemplates}
         creatingTemplate={creatingTemplate}
         handleCreate={(tpl) => { 
-          if (!businessId) return; // Prevent creation if businessId isn't loaded yet
           setCreatingTemplate(tpl.name); 
           createMutation.mutate(tpl); 
         }}
