@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Users, ChevronRight, ChevronDown, Check, Search, Shield, 
   BarChart2, Bell, User as UserIcon,
-  MoreHorizontal, Loader2, Pencil, Download, Eye, FileText, Database
+  MoreHorizontal, Loader2, Pencil, Download, FileText, Database
 } from 'lucide-react';
 import { 
   listAllUsers, getUserPermissions, updateUserPermissions, getRegister,
@@ -33,11 +33,7 @@ export default function AdminPage() {
 
   const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId), [users, selectedUserId]);
 
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
-
-  async function fetchInitialData() {
+  const fetchInitialData = useCallback(async () => {
     setLoading(true);
     try {
       const uData = await listAllUsers();
@@ -45,13 +41,17 @@ export default function AdminPage() {
       if (uData.length > 0 && !selectedUserId) {
         handleUserSelect(uData[0]);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error('Failed to load users');
     } finally {
       setLoading(false);
     }
-  }
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
 
   async function handleUserSelect(user: User) {
     setSelectedUserId(user.id);
@@ -65,7 +65,7 @@ export default function AdminPage() {
         if (p.canView) approved.add(p.registerId);
       });
       setSelectedRegIds(approved);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load permissions:', err);
       toast.error('Failed to load permissions');
     } finally {
@@ -360,6 +360,7 @@ export default function AdminPage() {
                                 if (e.target.checked) setSelectedRegIds(new Set(permissions.map(p => p.registerId)));
                                 else setSelectedRegIds(new Set());
                               }}
+                              aria-label="Select all registers"
                             />
                           </th>
                           <th style={s.th}>REGISTER NAME</th>
@@ -380,6 +381,7 @@ export default function AdminPage() {
                                 type="checkbox" 
                                 checked={selectedRegIds.has(p.registerId)}
                                 onChange={() => toggleRegSelection(p.registerId)}
+                                aria-label={`Select register ${p.registerName}`}
                               />
                             </td>
                             <td style={s.td}>

@@ -151,7 +151,7 @@ export default function HomePage() {
   });
 
   const excelMutation = useMutation({
-    mutationFn: ({ name, data, metadata }: { name: string; data: Record<string, string>[]; metadata?: any[] }) => 
+    mutationFn: ({ name, data, metadata }: { name: string; data: Record<string, string>[]; metadata?: unknown[] }) => 
       importExcelData(businessId!, name, data, undefined, metadata),
     onSuccess: (newReg) => {
       queryClient.setQueryData(['registers', 'all'], (old: RegisterSummary[] | undefined) => {
@@ -198,7 +198,7 @@ export default function HomePage() {
             );
           } else if (type === 'RESULT') {
             worker.terminate();
-            const { rows, metadata } = payload as { headers: string[]; rows: Record<string, string>[]; fileName: string; metadata?: any[] };
+            const { rows, metadata } = payload as { headers: string[]; rows: Record<string, string>[]; fileName: string; metadata?: unknown[] };
             const name = file.name.replace(/\.[^/.]+$/, '');
             toast.loading(
               <div className="toast-flex">
