@@ -99,6 +99,7 @@ export interface RegisterSummary {
   id: number; businessId: number; folderId?: number; name: string; icon: string; iconColor?: string;
   category: string; template: string; createdAt: string; updatedAt: string; entryCount: number;
   lastActivity?: string; deletedAt?: string; hasAccess?: boolean;
+  canEdit?: boolean; canDownload?: boolean;
 }
 
 export interface Column {
