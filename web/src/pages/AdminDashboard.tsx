@@ -203,6 +203,13 @@ export default function AdminDashboard() {
 
       {/* ──────── Main Content ──────── */}
       <main style={s.main}>
+        {loading && (
+          <div style={s.globalLoading}>
+            <Loader2 size={40} className="animate-spin" color="#2563eb" />
+            <span style={{ marginTop: 12, fontWeight: 500, color: '#64748b' }}>Loading Admin Panel...</span>
+          </div>
+        )}
+
         {/* Topbar */}
         <header style={s.topbar}>
           <div style={s.breadcrumbs}>
@@ -904,5 +911,19 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer'
+  },
+  globalLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(255,255,255,0.8)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+    backdropFilter: 'blur(4px)'
   }
 };
