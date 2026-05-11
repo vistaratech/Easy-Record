@@ -467,7 +467,7 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
     res.json({ id, businessId, folderId, name, icon: icon || 'file-text', iconColor, category: category || 'general', template: template || name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: cols.length > 0 ? 10 : 0 });
   } catch (err) {
     console.error('Register creation error:', err);
-    res.status(500).json({ error: 'Internal server error during register creation' });
+    res.status(500).json({ error: `Internal server error during register creation: ${err.message}` });
   }
 });
 
@@ -586,7 +586,7 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('Register save error:', err);
-    res.status(500).json({ error: 'Internal server error during register save' });
+    res.status(500).json({ error: `Internal server error during register save: ${err.message}` });
   }
 });
 
