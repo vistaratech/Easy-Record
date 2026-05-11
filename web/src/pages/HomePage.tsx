@@ -107,9 +107,8 @@ export default function HomePage() {
   }, [businesses, queryClient]);
 
   const { data: registers } = useQuery({
-    queryKey: ['registers', businessId],
-    queryFn: () => listRegisters(businessId!),
-    enabled: !!businessId,
+    queryKey: ['registers', 'all'],
+    queryFn: () => listRegisters(),
     staleTime: 0,
     refetchOnWindowFocus: false,
   });
@@ -117,10 +116,10 @@ export default function HomePage() {
   const deleteMutation = useMutation({
     mutationFn: deleteRegister,
     onSuccess: (_, deletedId) => { 
-      queryClient.setQueryData(['registers', businessId], (old: import('../lib/api').RegisterSummary[] | undefined) => {
+      queryClient.setQueryData(['registers', 'all'], (old: import('../lib/api').RegisterSummary[] | undefined) => {
         return (old || []).filter(r => r.id !== deletedId);
       });
-      queryClient.invalidateQueries({ queryKey: ['registers', businessId] }); 
+      queryClient.invalidateQueries({ queryKey: ['registers', 'all'] }); 
       queryClient.invalidateQueries({ queryKey: ['deletedRegisters', businessId] }); 
       setMenuId(null); 
       // If the user is currently viewing the deleted register, redirect them to the home page
@@ -137,13 +136,13 @@ export default function HomePage() {
 
   const renameMutation = useMutation({
     mutationFn: ({ id, name }: { id: number; name: string }) => renameRegister(id, name),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['registers', businessId] }); setRenameModal(false); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['registers', 'all'] }); setRenameModal(false); },
   });
 
   const duplicateMutation = useMutation({
     mutationFn: duplicateRegister,
     onSuccess: (newReg) => {
-      queryClient.invalidateQueries({ queryKey: ['registers', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['registers', 'all'] });
       setMenuId(null);
       navigate(`/register/${newReg.id}`);
     },
@@ -153,12 +152,12 @@ export default function HomePage() {
     mutationFn: ({ name, data, metadata }: { name: string; data: Record<string, string>[]; metadata?: any[] }) => 
       importExcelData(businessId!, name, data, undefined, metadata),
     onSuccess: (newReg) => {
-      queryClient.setQueryData(['registers', businessId], (old: RegisterSummary[] | undefined) => {
+      queryClient.setQueryData(['registers', 'all'], (old: RegisterSummary[] | undefined) => {
         const safeOld = old || [];
         if (safeOld.find((r: RegisterSummary) => r.id === newReg.id)) return safeOld;
         return [...safeOld, { ...newReg, entryCount: newReg.entryCount || 0 }];
       });
-      queryClient.invalidateQueries({ queryKey: ['registers', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['registers', 'all'] });
     },
     onError: (err: Error) => alert(err.message),
   });

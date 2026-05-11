@@ -185,7 +185,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
       FROM registers r
       INNER JOIN businesses b ON b.id = r.business_id
       LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-      WHERE r.deleted_at IS NULL AND b.owner_id = $1
+      WHERE r.deleted_at IS NULL
       ORDER BY b.name, r.name
     `, [userId]);
     res.json(rows);
@@ -264,10 +264,26 @@ app.post('/api/businesses', authenticateToken, async (req, res) => {
 // ── FOLDERS ──
 app.get('/api/folders', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
-  const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
-  if (bizCheck.length === 0) return res.status(403).json({ error: 'Forbidden' });
+  const userId = req.user.id;
+  
+  // If businessId is provided, check if user has access to it
+  if (businessId) {
+    const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, userId]);
+    if (bizCheck.length === 0 && !req.user.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+    
+    const { rows } = await pool.query('SELECT id, business_id AS "businessId", name, created_at AS "createdAt" FROM folders WHERE business_id=$1', [businessId]);
+    return res.json(rows);
+  }
 
-  const { rows } = await pool.query('SELECT id, business_id AS "businessId", name, created_at AS "createdAt" FROM folders WHERE business_id=$1', [businessId]);
+  // Otherwise, return folders from ALL businesses the user owns or has permissions in
+  const { rows } = await pool.query(`
+    SELECT DISTINCT f.id, f.business_id AS "businessId", f.name, f.created_at AS "createdAt"
+    FROM folders f
+    INNER JOIN businesses b ON b.id = f.business_id
+    LEFT JOIN registers r ON r.folder_id = f.id
+    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+    WHERE b.owner_id = $1 OR p.can_view = TRUE OR $2 = TRUE
+  `, [userId, req.user.isAdmin || false]);
   res.json(rows);
 });
 app.post('/api/folders', authenticateToken, async (req, res) => {
@@ -315,10 +331,10 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
     FROM registers r
     LEFT JOIN businesses b ON b.id = r.business_id
     LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE r.business_id = $2 
+    WHERE ($2::bigint IS NULL OR r.business_id = $2)
       AND r.deleted_at IS NULL
       AND ($3 = TRUE OR p.can_view = TRUE)
-  `, [userId, businessId, isAdmin]);
+  `, [userId, businessId || null, isAdmin]);
 
   res.json(rows);
 });

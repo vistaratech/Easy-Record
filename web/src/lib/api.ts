@@ -73,8 +73,9 @@ export interface Folder {
   createdAt: string;
 }
 
-export async function listFolders(businessId: number): Promise<Folder[]> {
-  const res = await fetchApi(`${API}/folders?businessId=${businessId}`);
+export async function listFolders(businessId?: number): Promise<Folder[]> {
+  const url = businessId ? `${API}/folders?businessId=${businessId}` : `${API}/folders`;
+  const res = await fetchApi(url);
   return res.json();
 }
 
@@ -345,8 +346,9 @@ export function bustRegisterCache(registerId: number): void {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export async function listRegisters(businessId: number): Promise<RegisterSummary[]> {
-  const res = await fetchApi(`${API}/registers?businessId=${businessId}`);
+export async function listRegisters(businessId?: number): Promise<RegisterSummary[]> {
+  const url = businessId ? `${API}/registers?businessId=${businessId}` : `${API}/registers`;
+  const res = await fetchApi(url);
   const all: RegisterSummary[] = await res.json();
   return all.filter(r => !r.deletedAt && r.hasAccess !== false);
 }

@@ -65,9 +65,8 @@ export const Sidebar = memo(function Sidebar({
   const canCreate = user?.isAdmin || user?.canEdit;
 
   const { data: folders = [] } = useQuery({
-    queryKey: ['folders', businessId],
-    queryFn: () => listFolders(businessId!),
-    enabled: !!businessId,
+    queryKey: ['folders', 'all'],
+    queryFn: () => listFolders(),
   });
 
   const { data: register } = useQuery({
@@ -132,44 +131,44 @@ export const Sidebar = memo(function Sidebar({
   };
 
   const { data: searchResults, isFetching: isSearching } = useQuery({
-    queryKey: ['globalSearch', businessId, deferredSearch],
-    queryFn: () => searchAllRegisters(businessId!, deferredSearch),
-    enabled: !!businessId && deferredSearch.trim().length >= 2,
+    queryKey: ['globalSearch', 'all', deferredSearch],
+    queryFn: () => searchAllRegisters(undefined as any, deferredSearch),
+    enabled: deferredSearch.trim().length >= 2,
     staleTime: 60 * 1000,
   });
 
 
   const createFolderMutation = useMutation({
     mutationFn: (name: string) => createFolder(businessId!, name),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['folders', businessId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['folders', 'all'] }),
   });
 
   const renameFolderMutation = useMutation({
     mutationFn: ({ id, name }: { id: number; name: string }) => renameFolder(id, name),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['folders', businessId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['folders', 'all'] }),
   });
 
   const deleteFolderMutation = useMutation({
     mutationFn: (id: number) => deleteFolder(id),
     onSuccess: (_, deletedId) => {
-      queryClient.setQueryData(['folders', businessId], (old: any[] | undefined) => {
+      queryClient.setQueryData(['folders', 'all'], (old: any[] | undefined) => {
         return (old || []).filter(f => f.id !== deletedId);
       });
-      queryClient.setQueryData(['registers', businessId], (old: RegisterSummary[] | undefined) => {
+      queryClient.setQueryData(['registers', 'all'], (old: RegisterSummary[] | undefined) => {
         return (old || []).map(r => r.folderId === deletedId ? { ...r, folderId: undefined } : r);
       });
-      queryClient.invalidateQueries({ queryKey: ['folders', businessId] });
-      queryClient.invalidateQueries({ queryKey: ['registers', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['folders', 'all'] });
+      queryClient.invalidateQueries({ queryKey: ['registers', 'all'] });
     },
   });
 
   const moveMutation = useMutation({
     mutationFn: ({ regId, fId }: { regId: number; fId: number | null }) => moveRegisterToFolder(regId, fId),
     onSuccess: (_, variables) => {
-      queryClient.setQueryData(['registers', businessId], (old: RegisterSummary[] | undefined) => {
+      queryClient.setQueryData(['registers', 'all'], (old: RegisterSummary[] | undefined) => {
         return (old || []).map(r => r.id === variables.regId ? { ...r, folderId: variables.fId === null ? undefined : variables.fId } : r);
       });
-      queryClient.invalidateQueries({ queryKey: ['registers', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['registers', 'all'] });
     },
   });
 
