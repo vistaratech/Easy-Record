@@ -441,7 +441,19 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
 
     await pool.query(
       `INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [id, businessId, folderId || null, name, icon || 'file-text', iconColor || null, category || 'general', template || name, JSON.stringify(cols), JSON.stringify(pages), cols.length > 0 ? 10 : 0]
+      [
+        id, 
+        businessId, 
+        folderId ? Number(folderId) : null, 
+        name, 
+        icon || 'file-text', 
+        iconColor || null, 
+        category || 'general', 
+        template || name, 
+        JSON.stringify(cols), 
+        JSON.stringify(pages), 
+        Number(cols.length > 0 ? 10 : 0)
+      ]
     );
 
     // Grant the creator full access by default
@@ -558,10 +570,20 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
         entry_count=EXCLUDED.entry_count,
         updated_at=NOW()
     `, [
-      id, businessId, reg.folderId || null, reg.name, reg.icon || 'file-text', reg.iconColor || null,
-      reg.category || 'general', reg.template || reg.name, JSON.stringify(reg.columns || []),
-      JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), reg.shareLink || null,
-      JSON.stringify(reg.sharedWith || []), JSON.stringify(reg.deletedItems || []), reg.entryCount || (reg.entries ? reg.entries.length : 0)
+      id, 
+      businessId, 
+      reg.folderId ? Number(reg.folderId) : null, 
+      reg.name, 
+      reg.icon || 'file-text', 
+      reg.iconColor || null,
+      reg.category || 'general', 
+      reg.template || reg.name, 
+      JSON.stringify(reg.columns || []),
+      JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), 
+      reg.shareLink || null,
+      JSON.stringify(reg.sharedWith || []), 
+      JSON.stringify(reg.deletedItems || []), 
+      Number(reg.entryCount) || (reg.entries ? reg.entries.length : 0)
     ]);
 
     // 4. Upsert Entries (if provided)
@@ -577,7 +599,14 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
            const entryId = Number(e.id) || (Number(id) + 5000 + i + j);
            const offset = j * 6;
            cValues.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
-           cParams.push(entryId, id, e.rowNumber || (i + j + 1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
+           cParams.push(
+             entryId, 
+             id, 
+             Number(e.rowNumber || (i + j + 1)), 
+             JSON.stringify(e.cells || {}), 
+             JSON.stringify(e.cellStyles || {}), 
+             Number(e.pageIndex) || 0
+           );
         }
         await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${cValues.join(',')}`, cParams);
       }
