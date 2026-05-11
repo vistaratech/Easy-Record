@@ -306,7 +306,7 @@ export const Sidebar = memo(function Sidebar({
           </div>
           
           <div className="sidebar-brand-actions">
-            <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)} title="Close sidebar" aria-label="Close sidebar">
+            <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>
               <X size={18} />
             </button>
             
@@ -431,16 +431,12 @@ export const Sidebar = memo(function Sidebar({
               <button 
                 onClick={handleCreateFolder}
                 style={{ padding: '6px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                title="Save folder"
-                aria-label="Save folder"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               </button>
               <button 
                 onClick={() => { setIsCreatingFolder(false); setNewFolderName(''); }}
                 style={{ padding: '6px', background: 'transparent', color: 'var(--muted)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                title="Cancel"
-                aria-label="Cancel"
               >
                 <X size={14} />
               </button>

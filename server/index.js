@@ -137,8 +137,7 @@ const canView = (userId, regId) => checkRegisterPermission(userId, regId, 'view'
 const canDownload = (userId, regId) => checkRegisterPermission(userId, regId, 'download');
 
 // ── ADMIN ──
-// Temporarily removed authenticateToken and adminOnly to allow direct access for testing
-app.get('/api/admin/stats', async (req, res) => {
+app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT COUNT(*) as "userCount" FROM users');
     res.json({ userCount: parseInt(rows[0].userCount, 10) });
@@ -147,7 +146,7 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
-app.get('/api/admin/users', async (req, res) => {
+app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", can_edit AS "canEdit", can_create_registers AS "canCreateRegisters", can_create_templates AS "canCreateTemplates", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
     console.log(`Admin user list fetch: found ${rows.length} users`);
@@ -158,7 +157,7 @@ app.get('/api/admin/users', async (req, res) => {
   }
 });
 
-app.get('/api/admin/users/:userId/permissions', async (req, res) => {
+app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { userId } = req.params;
     // Get registers that belong to businesses owned by the selected user
@@ -183,7 +182,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   }
 });
 
-app.post('/api/admin/permissions', async (req, res) => {
+app.post('/api/admin/permissions', authenticateToken, adminOnly, async (req, res) => {
   const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canEdit, canDownload }, ...]
   
   const client = await pool.connect();

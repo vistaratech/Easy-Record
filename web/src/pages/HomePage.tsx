@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, Routes, Route, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -151,7 +151,7 @@ export default function HomePage() {
   });
 
   const excelMutation = useMutation({
-    mutationFn: ({ name, data, metadata }: { name: string; data: Record<string, string>[]; metadata?: unknown[] }) => 
+    mutationFn: ({ name, data, metadata }: { name: string; data: Record<string, string>[]; metadata?: any[] }) => 
       importExcelData(businessId!, name, data, undefined, metadata),
     onSuccess: (newReg) => {
       queryClient.setQueryData(['registers', 'all'], (old: RegisterSummary[] | undefined) => {
@@ -198,7 +198,7 @@ export default function HomePage() {
             );
           } else if (type === 'RESULT') {
             worker.terminate();
-            const { rows, metadata } = payload as { headers: string[]; rows: Record<string, string>[]; fileName: string; metadata?: unknown[] };
+            const { rows, metadata } = payload as { headers: string[]; rows: Record<string, string>[]; fileName: string; metadata?: any[] };
             const name = file.name.replace(/\.[^/.]+$/, '');
             toast.loading(
               <div className="toast-flex">

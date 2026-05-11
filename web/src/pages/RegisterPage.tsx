@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo, useDeferredValue, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, useDeferredValue, useLayoutEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -116,7 +116,7 @@ export default function RegisterPage() {
   
   // Smooth column drag-and-drop reordering
   const [draggedColumnId, setDraggedColumnId] = useState<number | null>(null);
-  const [_dropTargetIdx, _setDropTargetIdx] = useState<number | null>(null);
+  const [_dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
   const dragGhostRef = useRef<HTMLDivElement | null>(null);
   const colHeaderRefs = useRef<Map<number, HTMLTableCellElement>>(new Map());
   const isDraggingCol = useRef(false);
@@ -138,7 +138,7 @@ export default function RegisterPage() {
         isLocalStorageInitializedRef.current = true;
         return new Set(JSON.parse(saved));
       }
-    } catch (_e) {}
+    } catch (e) {}
     return new Set();
   });
   const [frozenColumns, setFrozenColumns] = useState<Set<number>>(() => {
@@ -149,7 +149,7 @@ export default function RegisterPage() {
         isLocalStorageInitializedRef.current = true;
         return new Set(JSON.parse(saved));
       }
-    } catch (_e) {}
+    } catch (e) {}
     return new Set();
   });
 
@@ -396,7 +396,8 @@ export default function RegisterPage() {
         redoStack.current.push(action);
         toast.success(`Restored column "${action.column.name}"`);
       }
-    } catch {
+    } catch (err) {
+      console.error('Undo failed:', err);
       toast.error('Failed to undo');
       // Re-fetch to recover from any partial state
       queryClient.invalidateQueries({ queryKey: ['register', registerId] });
@@ -823,7 +824,7 @@ export default function RegisterPage() {
       return entriesToFilter;
     }
 
-    const result = isSearching ? [] : [...entriesToFilter];
+    let result = isSearching ? [] : [...entriesToFilter];
 
     if (isSearching) {
       const localLen = entriesToFilter.length;
@@ -3276,7 +3277,7 @@ export default function RegisterPage() {
       {/* ── Header ── */}
       <div className="register-header">
         <div className="register-header-left">
-          <button className="register-header-back-btn" onClick={() => navigate('/')} title="Back to home" aria-label="Back to home">
+          <button className="register-header-back-btn" onClick={() => navigate('/')}>
             <ArrowLeft size={18} />
           </button>
           <h1 className="register-header-title">{register.name}</h1>
@@ -3849,7 +3850,6 @@ export default function RegisterPage() {
                               type="checkbox"
                               checked={val === 'true' || val === 'Checked'}
                               readOnly
-                              aria-label={col.name}
                             />
                             <span className="checkbox-label">{val === 'true' || val === 'Checked' ? 'Checked' : 'Unchecked'}</span>
                           </div>
