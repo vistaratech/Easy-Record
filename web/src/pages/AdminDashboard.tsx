@@ -2,8 +2,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Users, ChevronRight, ChevronDown, Check, Search, Shield, 
-  BarChart2, Bell, User as UserIcon, CheckCircle, 
-  MoreHorizontal, Loader2, Pencil, Download, Eye, FileText, Database
+  BarChart2, Bell, User as UserIcon, 
+  MoreHorizontal, Loader2, Pencil, Download, FileText, Database
 } from 'lucide-react';
 import { 
   listAllUsers, getUserPermissions, updateUserPermissions, getRegister,
@@ -37,62 +37,6 @@ export default function AdminDashboard() {
   const [columnsLoading, setColumnsLoading] = useState(false);
 
   const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId), [users, selectedUserId]);
-  
-  if (authLoading) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-        <Loader2 className="animate-spin" size={32} color="#1e293b" />
-      </div>
-    );
-  }
-
-  useEffect(() => {
-    if (!authLoading && (!user || !user.isAdmin)) {
-      navigate('/', { replace: true });
-    }
-  }, [user, authLoading, navigate]);
-
-  useEffect(() => {
-    if (user?.isAdmin) {
-      fetchInitialData();
-    }
-  }, [user]);
-
-  async function fetchInitialData() {
-    setLoading(true);
-    try {
-      const uData = await listAllUsers();
-      setUsers(uData);
-      if (uData.length > 0 && !selectedUserId) {
-        handleUserSelect(uData[0]);
-      }
-    } catch (err: any) {
-      console.error(err);
-      toast.error('Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleUserSelect(user: User) {
-    setSelectedUserId(user.id);
-    setPermLoading(true);
-    try {
-      const perms = await getUserPermissions(user.id);
-      setPermissions(perms);
-      // Initialize selected set from approved registers
-      const approved = new Set<number>();
-      perms.forEach(p => {
-        if (p.canView) approved.add(p.registerId);
-      });
-      setSelectedRegIds(approved);
-    } catch (err: any) {
-      console.error('Failed to load permissions:', err);
-      toast.error('Failed to load permissions');
-    } finally {
-      setPermLoading(false);
-    }
-  }
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return users;
@@ -115,6 +59,62 @@ export default function AdminDashboard() {
   const approvedRegisters = useMemo(() => {
     return permissions.filter(p => p.canView);
   }, [permissions]);
+
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      navigate('/', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
+
+  useEffect(() => {
+    if (user?.isAdmin) {
+      fetchInitialData();
+    }
+  }, [user, fetchInitialData]);
+
+  const handleUserSelect = React.useCallback(async (user: User) => {
+    setSelectedUserId(user.id);
+    setPermLoading(true);
+    try {
+      const perms = await getUserPermissions(user.id);
+      setPermissions(perms);
+      // Initialize selected set from approved registers
+      const approved = new Set<number>();
+      perms.forEach(p => {
+        if (p.canView) approved.add(p.registerId);
+      });
+      setSelectedRegIds(approved);
+    } catch (err: unknown) {
+      console.error('Failed to load permissions:', err);
+      toast.error('Failed to load permissions');
+    } finally {
+      setPermLoading(false);
+    }
+  }, []);
+
+  const fetchInitialData = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const uData = await listAllUsers();
+      setUsers(uData);
+      if (uData.length > 0 && !selectedUserId) {
+        handleUserSelect(uData[0]);
+      }
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error('Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedUserId, handleUserSelect]);
+
+  if (authLoading || (!user || !user.isAdmin)) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <Loader2 className="animate-spin" size={32} color="#1e293b" />
+      </div>
+    );
+  }
 
   const toggleRegSelection = (regId: number) => {
     const next = new Set(selectedRegIds);
