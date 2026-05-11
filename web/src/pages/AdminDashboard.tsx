@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.tsx
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Users, ChevronRight, ChevronDown, Check, Search, Shield, 
   BarChart2, Bell, User as UserIcon, CheckCircle, 
@@ -156,6 +156,14 @@ export default function AdminDashboard() {
 
   return (
     <div style={s.container}>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
       {/* ──────── Sidebar ──────── */}
       <aside style={s.sidebar}>
         <div style={s.sidebarHeader}>

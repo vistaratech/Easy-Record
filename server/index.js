@@ -116,7 +116,6 @@ const adminOnly = async (req, res, next) => {
 
 // Permission check helper
 async function checkRegisterPermission(userId, registerId, type = 'view') {
-  const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [userId]);
   // Strict permission check: only honor user_permissions table
   const { rows: perms } = await pool.query(
     'SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2',

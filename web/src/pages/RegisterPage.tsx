@@ -3548,6 +3548,7 @@ export default function RegisterPage() {
                   rowHeight={dynamicRowHeight}
                   onCellFormatClick={onCellFormatClick}
                   searchTerm={deferredSearch || undefined}
+                  permissions={permissions}
                 />
               );
             })}
