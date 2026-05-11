@@ -406,14 +406,14 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
     const isAdmin = user.is_admin;
     const canCreateGlobal = user.can_edit;
 
-    // 2. Resolve Business ID (if missing, find one the user owns)
-    let businessId = reqBusinessId;
-    if (!businessId) {
+    // 2. Resolve Business ID
+    let businessId = Number(reqBusinessId);
+    if (!businessId || isNaN(businessId)) {
       const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
-      if (bizRows.length > 0) businessId = bizRows[0].id;
+      if (bizRows.length > 0) businessId = Number(bizRows[0].id);
     }
 
-    if (!businessId) {
+    if (!businessId || isNaN(businessId)) {
       return res.status(400).json({ error: 'A valid business is required to create a register.' });
     }
 
@@ -495,17 +495,17 @@ app.post('/api/registers/:id/restore', authenticateToken, async (req, res) => {
 
 app.put('/api/registers/:id', authenticateToken, async (req, res) => {
   try {
-    const id = req.params.id;
-    const reg = req.body;
+    // 1. Resolve and Validate IDs
+    const id = req.params.id === 'NaN' ? null : req.params.id;
+    if (!id) return res.status(400).json({ error: 'Invalid register ID provided.' });
 
-    // 1. Resolve Business ID (if missing, try to find one the user owns)
-    let businessId = reg.businessId;
-    if (!businessId) {
+    let businessId = Number(reg.businessId);
+    if (!businessId || isNaN(businessId)) {
       const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
-      if (bizRows.length > 0) businessId = bizRows[0].id;
+      if (bizRows.length > 0) businessId = Number(bizRows[0].id);
     }
 
-    if (!businessId) {
+    if (!businessId || isNaN(businessId)) {
       return res.status(400).json({ error: 'A valid business is required to save a register.' });
     }
 
@@ -574,9 +574,10 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
         const cParams = [];
         for (let j = 0; j < chunk.length; j++) {
            const e = chunk[j];
+           const entryId = Number(e.id) || (Number(id) + 5000 + i + j);
            const offset = j * 6;
            cValues.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
-           cParams.push(e.id, id, e.rowNumber || (i + j + 1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
+           cParams.push(entryId, id, e.rowNumber || (i + j + 1), JSON.stringify(e.cells || {}), JSON.stringify(e.cellStyles || {}), e.pageIndex || 0);
         }
         await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${cValues.join(',')}`, cParams);
       }
