@@ -2018,6 +2018,14 @@ export async function listAllUsers(): Promise<User[]> {
   return res.json();
 }
 
+export async function updateUserGlobalPermissions(userId: number, canCreateRegisters: boolean, canCreateTemplates: boolean) {
+  return fetchApi(`${API}/admin/users/${userId}/global-permissions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ canCreateRegisters, canCreateTemplates })
+  });
+}
+
 export async function getUserPermissions(userId: number): Promise<UserPermission[]> {
   const res = await fetchApi(`${API}/admin/users/${userId}/permissions`);
   return res.json();

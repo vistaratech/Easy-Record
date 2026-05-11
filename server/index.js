@@ -159,6 +159,24 @@ app.get('/api/admin/users', async (req, res) => {
   }
 });
 
+app.put('/api/admin/users/:userId/global-permissions', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { canCreateRegisters, canCreateTemplates } = req.body;
+    
+    // We update can_edit as the primary global create flag, plus the specific columns for future-proofing
+    await pool.query(
+      'UPDATE users SET can_edit = $1, can_create_registers = $1, can_create_templates = $2 WHERE id = $3',
+      [canCreateRegisters, canCreateTemplates, userId]
+    );
+    
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Update global perms error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   try {
     const { userId } = req.params;

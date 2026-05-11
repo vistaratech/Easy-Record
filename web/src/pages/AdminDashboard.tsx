@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { 
   listAllUsers, getUserPermissions, updateUserPermissions, getRegister,
+  updateUserGlobalPermissions,
   type User, type UserPermission, type Column
 } from '../lib/api';
 import toast from 'react-hot-toast';
@@ -151,6 +152,20 @@ export default function AdminDashboard() {
       toast.error('Failed to update permissions');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleToggleGlobalCreate() {
+    if (!selectedUserId || !selectedUser) return;
+    const nextVal = !selectedUser.canEdit;
+    try {
+      await updateUserGlobalPermissions(selectedUserId, nextVal, nextVal);
+      // Update local state
+      setUsers(prev => prev.map(u => u.id === selectedUserId ? { ...u, canEdit: nextVal, canCreateRegisters: nextVal, canCreateTemplates: nextVal } : u));
+      toast.success(nextVal ? 'User can now create new content' : 'Creation permission revoked');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update global permission');
     }
   }
 
@@ -317,6 +332,18 @@ export default function AdminDashboard() {
               >
                 APPROVED REGISTERS
               </button>
+
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, padding: '0 10px' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>ALLOW CREATION</span>
+                <label className="switch" style={s.switch}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedUser?.canEdit || false} 
+                    onChange={handleToggleGlobalCreate}
+                  />
+                  <span className="slider round"></span>
+                </label>
+              </div>
             </div>
 
             {/* Tab Content */}
