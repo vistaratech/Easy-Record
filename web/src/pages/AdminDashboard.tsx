@@ -1,8 +1,8 @@
 // src/pages/AdminDashboard.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { 
   Users, ChevronRight, ChevronDown, Check, Search, Shield, 
-  BarChart2, Bell, User as UserIcon, 
+  BarChart2, Bell, User as UserIcon,
   MoreHorizontal, Loader2, Pencil, Download, FileText, Database
 } from 'lucide-react';
 import { 
@@ -10,16 +10,11 @@ import {
   type User, type UserPermission, type Column
 } from '../lib/api';
 import toast from 'react-hot-toast';
-import { useAuth } from '../lib/auth';
-import { useNavigate } from 'react-router-dom';
 
 type Tab = 'all-registers' | 'approved-registers';
 type SidebarItem = 'users' | 'active-report';
 
 export default function AdminDashboard() {
-  const { user, isLoading: authLoading } = useAuth();
-  const navigate = useNavigate();
-  
   const [activeSidebar, setActiveSidebar] = useState<SidebarItem>('users');
   const [usersExpanded, setUsersExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('all-registers');
@@ -37,6 +32,46 @@ export default function AdminDashboard() {
   const [columnsLoading, setColumnsLoading] = useState(false);
 
   const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId), [users, selectedUserId]);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  async function fetchInitialData() {
+    setLoading(true);
+    try {
+      const uData = await listAllUsers();
+      setUsers(uData);
+      if (uData.length > 0 && !selectedUserId) {
+        handleUserSelect(uData[0]);
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleUserSelect(user: User) {
+    setSelectedUserId(user.id);
+    setPermLoading(true);
+    try {
+      const perms = await getUserPermissions(user.id);
+      setPermissions(perms);
+      // Initialize selected set from approved registers
+      const approved = new Set<number>();
+      perms.forEach(p => {
+        if (p.canView) approved.add(p.registerId);
+      });
+      setSelectedRegIds(approved);
+    } catch (err: any) {
+      console.error('Failed to load permissions:', err);
+      toast.error('Failed to load permissions');
+    } finally {
+      setPermLoading(false);
+    }
+  }
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return users;
@@ -59,62 +94,6 @@ export default function AdminDashboard() {
   const approvedRegisters = useMemo(() => {
     return permissions.filter(p => p.canView);
   }, [permissions]);
-
-  useEffect(() => {
-    if (!authLoading && (!user || !user.isAdmin)) {
-      navigate('/', { replace: true });
-    }
-  }, [user, authLoading, navigate]);
-
-  const handleUserSelect = React.useCallback(async (user: User) => {
-    setSelectedUserId(user.id);
-    setPermLoading(true);
-    try {
-      const perms = await getUserPermissions(user.id);
-      setPermissions(perms);
-      // Initialize selected set from approved registers
-      const approved = new Set<number>();
-      perms.forEach(p => {
-        if (p.canView) approved.add(p.registerId);
-      });
-      setSelectedRegIds(approved);
-    } catch (err: unknown) {
-      console.error('Failed to load permissions:', err);
-      toast.error('Failed to load permissions');
-    } finally {
-      setPermLoading(false);
-    }
-  }, []);
-
-  const fetchInitialData = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const uData = await listAllUsers();
-      setUsers(uData);
-      if (uData.length > 0 && !selectedUserId) {
-        handleUserSelect(uData[0]);
-      }
-    } catch (err: unknown) {
-      console.error(err);
-      toast.error('Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedUserId, handleUserSelect]);
-
-  useEffect(() => {
-    if (user?.isAdmin) {
-      fetchInitialData();
-    }
-  }, [user, fetchInitialData]);
-
-  if (authLoading || (!user || !user.isAdmin)) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-        <Loader2 className="animate-spin" size={32} color="#1e293b" />
-      </div>
-    );
-  }
 
   const toggleRegSelection = (regId: number) => {
     const next = new Set(selectedRegIds);
@@ -177,14 +156,6 @@ export default function AdminDashboard() {
 
   return (
     <div style={s.container}>
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        .animate-spin {
-          animation: spin 1s linear infinite;
-        }
-      `}</style>
       {/* ──────── Sidebar ──────── */}
       <aside style={s.sidebar}>
         <div style={s.sidebarHeader}>
@@ -428,7 +399,7 @@ export default function AdminDashboard() {
                       ) : (
                         <Check size={16} />
                       )}
-                      <span>Save Changes</span>
+                      <span>Approve ({selectedRegIds.size})</span>
                     </button>
                   </div>
                 </div>
@@ -468,7 +439,7 @@ export default function AdminDashboard() {
                                 </button>
                               </td>
                               <td style={s.td}>
-                                <div onClick={() => handleExpandRegister(p.registerId)} style={{ ...s.regRow, cursor: 'pointer' }}>
+                                <div style={{ ...s.regRow, cursor: 'pointer' }} onClick={() => handleExpandRegister(p.registerId)}>
                                   <div style={s.iconCircle}>
                                     <FileText size={14} color="#2563eb" />
                                   </div>

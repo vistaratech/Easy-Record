@@ -14,7 +14,6 @@ import { DashboardContent } from '../components/home/DashboardContent';
 import { Sidebar } from '../components/home/Sidebar';
 import { NotificationPanel } from '../components/common/NotificationPanel';
 import { useNotifications } from '../lib/NotificationContext';
-import { useAuth } from '../lib/auth';
 import RegisterPage from './RegisterPage';
 import TemplatesPage from './TemplatesPage';
 import HistoryPage from './HistoryPage';
@@ -39,7 +38,6 @@ export default function HomePage() {
   const location = useLocation();
   const isAdminPath = location.pathname.startsWith('/admin');
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [menuId, setMenuId] = useState<number | null>(null);
   const [renameModal, setRenameModal] = useState(false);
@@ -368,31 +366,26 @@ export default function HomePage() {
             <button className="context-item" onClick={() => { navigate(`/register/${menuId}`); setMenuId(null); }}>
               <Eye size={16} />Open Register
             </button>
-            
-            {(filtered?.find(r => r.id === menuId)?.canEdit || user?.isAdmin) && (
-              <>
-                <button className="context-item" onClick={() => {
-                  const reg = filtered?.find((r) => r.id === menuId);
-                  setRenameId(menuId); setRenameValue(reg?.name || ''); setMenuId(null); setRenameModal(true);
-                }}>
-                  <Pencil size={16} />Rename
-                </button>
-                <button className="context-item" onClick={() => duplicateMutation.mutate(menuId)}>
-                  <Copy size={16} />Duplicate
-                </button>
-                <button className="context-item" onClick={() => { setClipboard({ id: menuId, type: 'copy' }); setMenuId(null); }}>
-                  <Copy size={16} />Copy
-                </button>
-                <button className="context-item" onClick={() => { setClipboard({ id: menuId, type: 'move' }); setMenuId(null); }}>
-                  <Scissors size={16} />Move
-                </button>
-                <button className="context-item danger" onClick={() => {
-                  if (confirm('Delete this register? This cannot be undone.')) deleteMutation.mutate(menuId);
-                }}>
-                  <Trash2 size={16} />Delete
-                </button>
-              </>
-            )}
+            <button className="context-item" onClick={() => {
+              const reg = filtered?.find((r) => r.id === menuId);
+              setRenameId(menuId); setRenameValue(reg?.name || ''); setMenuId(null); setRenameModal(true);
+            }}>
+              <Pencil size={16} />Rename
+            </button>
+            <button className="context-item" onClick={() => duplicateMutation.mutate(menuId)}>
+              <Copy size={16} />Duplicate
+            </button>
+            <button className="context-item" onClick={() => { setClipboard({ id: menuId, type: 'copy' }); setMenuId(null); }}>
+              <Copy size={16} />Copy
+            </button>
+            <button className="context-item" onClick={() => { setClipboard({ id: menuId, type: 'move' }); setMenuId(null); }}>
+              <Scissors size={16} />Move
+            </button>
+            <button className="context-item danger" onClick={() => {
+              if (confirm('Delete this register? This cannot be undone.')) deleteMutation.mutate(menuId);
+            }}>
+              <Trash2 size={16} />Delete
+            </button>
           </div>
         </div>
       )}

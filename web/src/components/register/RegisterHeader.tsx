@@ -71,16 +71,15 @@ export function RegisterHeader({ register, handleOpenExport, permissions }: Regi
 
       {/* Share removed - centralized in Admin Panel */}
       
-      {canDownload && (
-        <div className="export-dropdown-wrap">
-          <button 
-            className="register-header-btn" 
-            onClick={handleOpenExport}
-          >
-            <Download size={14} /> Download Options
-          </button>
-        </div>
-      )}
+      <div className="export-dropdown-wrap">
+        <button 
+          className={`register-header-btn ${!canDownload ? 'disabled' : ''}`} 
+          onClick={canDownload ? handleOpenExport : () => toast.error('Download permission denied')}
+          title={!canDownload ? 'You do not have permission to download' : ''}
+        >
+          <Download size={14} /> Download Options
+        </button>
+      </div>
 
       {canEdit && (
         <button className="register-header-btn outline" onClick={() => { setTemplateName(register?.name || ''); setSaveTemplateModal(true); }}>

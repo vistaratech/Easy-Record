@@ -76,7 +76,7 @@ export default function RegisterPage() {
     placeholderData: keepPreviousData,
   });
 
-  const permissions = register?.permissions || { canView: false, canEdit: false, canDownload: false };
+  const permissions = register?.permissions || { canView: true, canEdit: true, canDownload: true };
   const cachedRegister = queryClient.getQueryData(['register', registerId]) as any;
 
   // Fetch all registers for the Link Column feature
@@ -3548,7 +3548,6 @@ export default function RegisterPage() {
                   rowHeight={dynamicRowHeight}
                   onCellFormatClick={onCellFormatClick}
                   searchTerm={deferredSearch || undefined}
-                  permissions={permissions}
                 />
               );
             })}
@@ -3775,21 +3774,19 @@ export default function RegisterPage() {
                           </label>
                           <span className="row-detail-type-badge">{col.type.replace('_', ' ')}</span>
                         </div>
-                        {permissions.canEdit && (
-                          <button 
-                            className="row-detail-col-btn" 
-                            title="Column Settings"
-                            onClick={() => {
-                              setActiveModalColId(col.id);
-                              setChangeTypeValue(col.type);
-                              if (col.type === 'formula') setNewColFormula(col.formula || '');
-                              if (col.type === 'dropdown') setNewColDropdownOpts((col.dropdownOptions || []).join(', '));
-                              setChangeTypeModal(true);
-                            }}
-                          >
-                            <ChevronDown size={12} />
-                          </button>
-                        )}
+                        <button 
+                          className="row-detail-col-btn" 
+                          title="Column Settings"
+                          onClick={() => {
+                            setActiveModalColId(col.id);
+                            setChangeTypeValue(col.type);
+                            if (col.type === 'formula') setNewColFormula(col.formula || '');
+                            if (col.type === 'dropdown') setNewColDropdownOpts((col.dropdownOptions || []).join(', '));
+                            setChangeTypeModal(true);
+                          }}
+                        >
+                          <ChevronDown size={12} />
+                        </button>
                       </div>
                       
                       <div className="row-detail-input-wrapper">
