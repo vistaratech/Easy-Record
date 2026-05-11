@@ -3775,19 +3775,21 @@ export default function RegisterPage() {
                           </label>
                           <span className="row-detail-type-badge">{col.type.replace('_', ' ')}</span>
                         </div>
-                        <button 
-                          className="row-detail-col-btn" 
-                          title="Column Settings"
-                          onClick={() => {
-                            setActiveModalColId(col.id);
-                            setChangeTypeValue(col.type);
-                            if (col.type === 'formula') setNewColFormula(col.formula || '');
-                            if (col.type === 'dropdown') setNewColDropdownOpts((col.dropdownOptions || []).join(', '));
-                            setChangeTypeModal(true);
-                          }}
-                        >
-                          <ChevronDown size={12} />
-                        </button>
+                        {permissions.canEdit && (
+                          <button 
+                            className="row-detail-col-btn" 
+                            title="Column Settings"
+                            onClick={() => {
+                              setActiveModalColId(col.id);
+                              setChangeTypeValue(col.type);
+                              if (col.type === 'formula') setNewColFormula(col.formula || '');
+                              if (col.type === 'dropdown') setNewColDropdownOpts((col.dropdownOptions || []).join(', '));
+                              setChangeTypeModal(true);
+                            }}
+                          >
+                            <ChevronDown size={12} />
+                          </button>
+                        )}
                       </div>
                       
                       <div className="row-detail-input-wrapper">
