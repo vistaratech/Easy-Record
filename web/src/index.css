@@ -8920,13 +8920,18 @@ body.modal-open {
 .cell-rating.readonly,
 .cell-image-wrap.readonly,
 .cell-url-wrap.readonly {
-  background-color: rgba(0, 0, 0, 0.02) !important;
+  background-color: rgba(0, 0, 0, 0.03) !important;
   color: var(--muted-light) !important;
-  cursor: default !important;
+  cursor: not-allowed !important;
   opacity: 0.55;
-  pointer-events: none; /* Block all interactions */
+  pointer-events: auto; /* Allow clicks to detect "try" attempt */
   border-color: transparent !important;
   box-shadow: none !important;
+}
+
+.spreadsheet-wrapper.readonly-mode {
+  filter: contrast(0.95) brightness(0.98);
+  background-color: #f8fafc;
 }
 
 .cell-image-wrap.readonly {

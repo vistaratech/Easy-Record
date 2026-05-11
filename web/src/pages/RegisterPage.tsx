@@ -540,6 +540,11 @@ export default function RegisterPage() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+      } else if (!permissions.canEdit) {
+        // If they try to type a character while in read-only mode
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          toast.error("You’re in read-only mode. Editing is disabled.", { id: 'readonly-toast' });
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -2792,6 +2797,13 @@ export default function RegisterPage() {
 
   const handleTableMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+    
+    // Detect if user is trying to interact with a read-only area
+    if (target.closest('.readonly') || (!permissions.canEdit && target.closest('.cell-inner-wrapper'))) {
+      toast.error("You’re in read-only mode. Editing is disabled.", { id: 'readonly-toast' });
+      return;
+    }
+
     if (target.classList.contains('fill-handle')) {
       if (!permissions.canEdit) return;
       e.preventDefault();
@@ -3388,7 +3400,7 @@ export default function RegisterPage() {
       {/* ── Spreadsheet ── */}
       <div 
         ref={parentRef}
-        className="spreadsheet-wrapper" 
+        className={`spreadsheet-wrapper ${!permissions.canEdit ? 'readonly-mode' : ''}`} 
         key={`grid-${columns.length}-${columns.map(c => c.id).join('-')}`}
         onMouseDown={handleTableMouseDown}
         onScroll={(e) => {
