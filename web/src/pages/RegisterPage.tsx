@@ -2200,9 +2200,11 @@ export default function RegisterPage() {
         return { ...old, entries: sorted };
       });
       // Fire database write via the mutation queue
-      updateEntriesOrder(registerId, sorted).catch(err => {
-        console.error('Failed to save sorted order:', err);
-      });
+      if (permissions.canEdit) {
+        updateEntriesOrder(registerId, sorted).catch(err => {
+          console.error('Failed to save sorted order:', err);
+        });
+      }
 
       return sorted;
     });
@@ -2791,6 +2793,7 @@ export default function RegisterPage() {
   const handleTableMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.classList.contains('fill-handle')) {
+      if (!permissions.canEdit) return;
       e.preventDefault();
       const rowIdx = parseInt(target.getAttribute('data-row-idx') || '-1');
       const colId = target.getAttribute('data-col-id');
@@ -3477,10 +3480,12 @@ export default function RegisterPage() {
                       </span>
                     )}
                     {frozenColumns.has(col.id) && <Pin size={10} color="var(--muted)" className="frozen-pin" />}
-                    <div
-                      className="col-resize-handle"
-                      onMouseDown={(e) => handleColResizeMouseDown(e, col.id)}
-                    />
+                    {permissions.canEdit && (
+                      <div
+                        className="col-resize-handle"
+                        onMouseDown={(e) => handleColResizeMouseDown(e, col.id)}
+                      />
+                    )}
                   </div>
                 </th>
               )})}

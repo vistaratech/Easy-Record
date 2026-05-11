@@ -463,6 +463,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
         }
         
         const handleContextMenu = (e: React.MouseEvent) => {
+          if (!canEdit) return;
           e.preventDefault();
           if (onCellFormatClick) {
             onCellFormatClick(entry.id, col.id.toString(), (e.currentTarget as HTMLElement).getBoundingClientRect());
