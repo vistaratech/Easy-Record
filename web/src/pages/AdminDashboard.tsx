@@ -3,11 +3,11 @@ import { useEffect, useState, useMemo } from 'react';
 import { 
   Users, ChevronRight, ChevronDown, Check, Search, Shield, 
   BarChart2, Bell, User as UserIcon, CheckCircle, 
-  MoreHorizontal, Loader2
+  MoreHorizontal, Loader2, Pencil, Download, Eye, FileText, Database
 } from 'lucide-react';
 import { 
-  listAllUsers, getUserPermissions, updateUserPermissions,
-  type User, type UserPermission 
+  listAllUsers, getUserPermissions, updateUserPermissions, getRegister,
+  type User, type UserPermission, type Column
 } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -27,6 +27,9 @@ export default function AdminDashboard() {
   const [registerSearch, setRegisterSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [selectedRegIds, setSelectedRegIds] = useState<Set<number>>(new Set());
+  const [expandedRegId, setExpandedRegId] = useState<number | null>(null);
+  const [regColumns, setRegColumns] = useState<Column[]>([]);
+  const [columnsLoading, setColumnsLoading] = useState(false);
 
   const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId), [users, selectedUserId]);
 
@@ -97,6 +100,33 @@ export default function AdminDashboard() {
     if (next.has(regId)) next.delete(regId);
     else next.add(regId);
     setSelectedRegIds(next);
+  };
+
+  const togglePermission = (regId: number, field: 'canEdit' | 'canDownload') => {
+    setPermissions(prev => prev.map(p => {
+      if (p.registerId === regId) {
+        return { ...p, [field]: !p[field] };
+      }
+      return p;
+    }));
+  };
+
+  const handleExpandRegister = async (regId: number) => {
+    if (expandedRegId === regId) {
+      setExpandedRegId(null);
+      return;
+    }
+    setExpandedRegId(regId);
+    setColumnsLoading(true);
+    try {
+      const reg = await getRegister(regId);
+      setRegColumns(reg.template || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load columns');
+    } finally {
+      setColumnsLoading(false);
+    }
   };
 
   async function handleApprove() {
@@ -386,26 +416,106 @@ export default function AdminDashboard() {
                     <table style={s.table}>
                       <thead>
                         <tr>
+                          <th style={{ ...s.th, width: '40px' }}></th>
                           <th style={s.th}>REGISTER NAME</th>
+                          <th style={{ ...s.th, width: '120px', textAlign: 'center' }}>EDIT</th>
+                          <th style={{ ...s.th, width: '120px', textAlign: 'center' }}>EXPORT</th>
                         </tr>
                       </thead>
                       <tbody>
                         {approvedRegisters.length === 0 ? (
                           <tr>
-                            <td style={s.emptyCell}>No approved registers yet.</td>
+                            <td colSpan={4} style={s.emptyCell}>No approved registers yet.</td>
                           </tr>
                         ) : approvedRegisters.map(p => (
-                          <tr key={p.registerId} style={s.tr}>
-                            <td style={s.td}>
-                              <div style={s.regRow}>
-                                <CheckCircle size={18} color="#10b981" />
-                                <span style={s.regName}>{p.registerName}</span>
-                              </div>
-                            </td>
-                          </tr>
+                          <>
+                            <tr key={p.registerId} style={s.tr}>
+                              <td style={s.td}>
+                                <button 
+                                  onClick={() => handleExpandRegister(p.registerId)}
+                                  style={s.expandBtn}
+                                >
+                                  {expandedRegId === p.registerId ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                </button>
+                              </td>
+                              <td style={s.td}>
+                                <div style={s.regRow} onClick={() => handleExpandRegister(p.registerId)} style={{ cursor: 'pointer' }}>
+                                  <div style={s.iconCircle}>
+                                    <FileText size={14} color="#2563eb" />
+                                  </div>
+                                  <span style={s.regName}>{p.registerName}</span>
+                                </div>
+                              </td>
+                              <td style={{ ...s.td, textAlign: 'center' }}>
+                                <button 
+                                  onClick={() => togglePermission(p.registerId, 'canEdit')}
+                                  style={{ ...s.permToggle, ...(p.canEdit ? s.permToggleActive : {}) }}
+                                  title={p.canEdit ? "Edit permission enabled" : "Edit permission disabled"}
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                              </td>
+                              <td style={{ ...s.td, textAlign: 'center' }}>
+                                <button 
+                                  onClick={() => togglePermission(p.registerId, 'canDownload')}
+                                  style={{ ...s.permToggle, ...(p.canDownload ? s.permToggleActive : {}) }}
+                                  title={p.canDownload ? "Download permission enabled" : "Download permission disabled"}
+                                >
+                                  <Download size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                            {expandedRegId === p.registerId && (
+                              <tr style={{ background: '#f1f5f9' }}>
+                                <td colSpan={4} style={{ padding: '1rem 3rem' }}>
+                                  <div style={s.columnPanel}>
+                                    <h4 style={s.columnTitle}>
+                                      <Database size={14} style={{ marginRight: 8 }} />
+                                      Register Columns
+                                    </h4>
+                                    {columnsLoading ? (
+                                      <div style={s.columnLoading}>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Fetching column structure...</span>
+                                      </div>
+                                    ) : (
+                                      <div style={s.columnGrid}>
+                                        {regColumns.length === 0 ? (
+                                          <div style={s.noColumns}>No columns defined for this register.</div>
+                                        ) : regColumns.map(col => (
+                                          <div key={col.id} style={s.columnBadge}>
+                                            <span style={s.columnName}>{col.name}</span>
+                                            <span style={s.columnType}>{col.type}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  
+                  <div style={s.panelFooter}>
+                    <p style={{ fontSize: '13px', color: '#64748b' }}>
+                      Tip: Use the toggles above to grant/revoke specific Edit and Export privileges.
+                    </p>
+                    <button 
+                      style={s.approveBtn}
+                      onClick={handleApprove}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Check size={16} />
+                      )}
+                      <span>Save Changes</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -845,7 +955,7 @@ const s: Record<string, React.CSSProperties> = {
     gap: 12
   },
   emptyCell: {
-    padding: '4rem',
+    padding: '3rem',
     textAlign: 'center',
     color: '#94a3b8',
     fontSize: 14
@@ -857,25 +967,25 @@ const s: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     background: '#f8fafc',
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12
+    borderRadius: '0 0 12px 12px'
   },
   selectionCount: {
     fontSize: 13,
+    fontWeight: 600,
     color: '#64748b'
   },
   approveBtn: {
+    padding: '0.625rem 1.25rem',
+    background: '#2563eb',
+    color: '#fff',
+    borderRadius: 8,
+    border: 'none',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    background: '#2563eb',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    padding: '0.6rem 1.25rem',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
     transition: 'all 0.2s'
   },
   placeholderContent: {
@@ -883,37 +993,124 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#f8fafc'
+    padding: '2rem'
   },
   reportEmptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
     textAlign: 'center',
-    maxWidth: 400,
-    padding: '2rem'
+    maxWidth: 400
   },
   emptyTitle: {
     fontSize: 24,
-    fontWeight: 700,
-    color: '#334155',
-    margin: '1.5rem 0 0.5rem'
+    fontWeight: 800,
+    margin: '1.5rem 0 0.5rem 0'
   },
   emptyDesc: {
     fontSize: 15,
     color: '#64748b',
-    lineHeight: 1.6,
-    marginBottom: '2rem'
+    margin: '0 0 2rem 0',
+    lineHeight: 1.5
   },
   secondaryBtn: {
+    padding: '0.75rem 1.5rem',
     background: '#fff',
     border: '1px solid #e2e8f0',
-    color: '#334155',
-    padding: '0.6rem 1.5rem',
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 14,
     fontWeight: 600,
-    cursor: 'pointer'
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  permToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    border: '1px solid #e2e8f0',
+    background: '#fff',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
+    margin: '0 4px'
+  },
+  permToggleActive: {
+    background: '#dcfce7',
+    color: '#10b981',
+    borderColor: '#10b981'
+  },
+  expandBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    border: 'none',
+    background: 'transparent',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  columnPanel: {
+    background: '#fff',
+    borderRadius: 8,
+    border: '1px solid #e2e8f0',
+    padding: '1rem',
+    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+  },
+  columnTitle: {
+    fontSize: 13,
+    fontWeight: 700,
+    margin: '0 0 1rem 0',
+    display: 'flex',
+    alignItems: 'center',
+    color: '#1e293b'
+  },
+  columnLoading: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 13,
+    color: '#64748b',
+    padding: '1rem 0'
+  },
+  columnGrid: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  columnBadge: {
+    padding: '4px 10px',
+    background: '#f1f5f9',
+    borderRadius: 6,
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 80,
+    border: '1px solid #e2e8f0'
+  },
+  columnName: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#334155'
+  },
+  columnType: {
+    fontSize: 10,
+    color: '#94a3b8',
+    textTransform: 'uppercase'
+  },
+  noColumns: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontStyle: 'italic'
+  },
+  iconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    background: '#eff6ff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   globalLoading: {
     position: 'absolute',
