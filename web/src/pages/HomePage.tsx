@@ -14,6 +14,7 @@ import { DashboardContent } from '../components/home/DashboardContent';
 import { Sidebar } from '../components/home/Sidebar';
 import { NotificationPanel } from '../components/common/NotificationPanel';
 import { useNotifications } from '../lib/NotificationContext';
+import { useAuth } from '../lib/auth';
 import RegisterPage from './RegisterPage';
 import TemplatesPage from './TemplatesPage';
 import HistoryPage from './HistoryPage';
@@ -38,6 +39,7 @@ export default function HomePage() {
   const location = useLocation();
   const isAdminPath = location.pathname.startsWith('/admin');
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [menuId, setMenuId] = useState<number | null>(null);
   const [renameModal, setRenameModal] = useState(false);

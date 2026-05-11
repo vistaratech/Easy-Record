@@ -311,6 +311,8 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
   const { rows } = await pool.query(`
     SELECT DISTINCT
       r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
+      r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
+      r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
       CASE 
         WHEN p.can_view = TRUE THEN TRUE
         ELSE FALSE
