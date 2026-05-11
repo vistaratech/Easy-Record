@@ -3283,7 +3283,10 @@ export default function RegisterPage() {
           <button className="register-header-back-btn" onClick={() => navigate('/')}>
             <ArrowLeft size={18} />
           </button>
-          <h1 className="register-header-title">{register.name}</h1>
+          <h1 className="register-header-title">
+            {register.name}
+            {!permissions.canEdit && <span className="read-only-badge">Read Only</span>}
+          </h1>
         </div>
         <RegisterHeader 
           register={register} 

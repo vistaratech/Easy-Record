@@ -8913,23 +8913,48 @@ body.modal-open {
   to { transform: rotate(360deg); }
 }
 
-/* Read-only styles */
+/* Read-only styles - significantly faded and non-interactive */
 .cell-input.readonly,
 .cell-currency.readonly,
 .cell-dropdown.readonly,
 .cell-rating.readonly,
 .cell-image-wrap.readonly,
 .cell-url-wrap.readonly {
-  background-color: var(--table-bg) !important;
-  color: var(--muted) !important;
+  background-color: rgba(0, 0, 0, 0.02) !important;
+  color: var(--muted-light) !important;
   cursor: default !important;
-  opacity: 0.8;
+  opacity: 0.55;
+  pointer-events: none; /* Block all interactions */
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.cell-image-wrap.readonly {
+  filter: grayscale(0.6) opacity(0.7);
+}
+
+.cell-rating.readonly button.star-btn {
+  cursor: default !important;
+  opacity: 0.5;
 }
 
 .cell-dropdown.readonly span,
 .cell-currency.readonly span,
-.cell-url-wrap.readonly span {
-  color: var(--muted) !important;
+.cell-url-wrap.readonly span,
+.cell-input.readonly span {
+  color: var(--muted-light) !important;
+}
+
+.row-detail-input.readonly,
+.row-detail-formula-result.readonly,
+.row-detail-input-wrapper.readonly {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #64748b !important;
+  opacity: 0.6;
+  cursor: default !important;
+  pointer-events: none;
+  box-shadow: none !important;
 }
 
 .read-only-badge {

@@ -48,7 +48,7 @@ const FormulaCell = React.memo(({ idx, col, entry, registerColumns, onKeyDown }:
     <div
       data-cell={`cell-${idx}-${col.id}`}
       tabIndex={0}
-      className="cell-formula"
+      className={`cell-formula ${onKeyDown ? '' : 'readonly'}`}
       onKeyDown={onKeyDown}
     >
       {result || '–'}
@@ -590,7 +590,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
           ) : col.type === 'auto_increment' ? (
             <div 
               data-cell={`cell-${idx}-${col.id}`} 
-              className="cell-auto-increment-readonly" 
+              className={`cell-auto-increment-readonly ${!canEdit ? 'readonly' : ''}`} 
               tabIndex={0} 
               title="Auto-generated ID (Read-only)" 
               onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
