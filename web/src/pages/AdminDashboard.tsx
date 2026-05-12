@@ -3,14 +3,14 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Users, ChevronRight, ChevronDown, Check, Search, Shield,
   BarChart2, Bell, User as UserIcon, Settings, BookOpen,
-  Loader2, Pencil, Download, FileText, Database,
-  X, AlertTriangle, ArrowLeft, LogOut, Home,
-  GraduationCap, ClipboardList, Calendar, Plus, MoreVertical, Trash2, Menu,
+  Loader2, Pencil, Download, FileText,
+  X, AlertTriangle, ArrowLeft, Home,
+  Plus, MoreVertical, Trash2, Menu,
   UserCheck, UserX, Key, ShieldAlert
 } from 'lucide-react';
 import {
   listAllUsers, getUserPermissions, updateUserPermissions, getRegister,
-  updateUserGlobalPermissions, createRegister, permanentlyDeleteRegister,
+  createRegister, permanentlyDeleteRegister,
   signup, deleteUser, resetUserPassword, toggleUserStatus,
   type User, type UserPermission, type Column
 } from '../lib/api';
@@ -24,7 +24,7 @@ type NavSection = 'dashboard' | 'users' | 'registers' | 'settings';
 type Tab = 'all-registers' | 'approved-registers';
 
 export default function AdminDashboard() {
-  const { user: currentUser, logout } = useAuth();
+  const { user: currentUser } = useAuth();
   const navigate = useNavigate();
   const [activeNav, setActiveNav] = useState<NavSection>('users');
   const [usersExpanded, setUsersExpanded] = useState(true);
@@ -229,7 +229,7 @@ export default function AdminDashboard() {
     setCreating(true);
     try {
       // Use the existing signup API to create the user
-      const result = await signup(newUser.name, newUser.email, newUser.password);
+      await signup(newUser.name, newUser.email, newUser.password);
       
       // If role is admin, we might need to update their role (assuming signup defaults to user)
       if (newUser.role === 'admin') {
@@ -304,7 +304,6 @@ export default function AdminDashboard() {
   // Computed stats
   const adminCount = users.filter(u => u.isAdmin).length;
   const userCount = users.length;
-  const approvedCount = permissions.filter(p => selectedRegIds.has(p.registerId)).length;
 
   // ─── Render ───
   return (
