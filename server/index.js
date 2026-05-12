@@ -995,15 +995,6 @@ app.post('/api/backups/:id/restore', authenticateToken, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ── LOG HELPER ──
-async function logAction(db, businessId, action, details, meta = {}) {
-  try {
-    const id = genId();
-    await db.query('INSERT INTO history(id,business_id,action,details,user_name,register_name,register_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
-      [id, businessId, action, details, meta.userName || 'System', meta.registerName || null, meta.registerId || null]);
-  } catch (e) { console.error('Log failed:', e.message); }
-}
-
 // ── ADMIN USER MANAGEMENT ──
 // Fully delete a user — removes credentials, permissions, registers, and businesses
 app.delete('/api/admin/users/:userId', authenticateToken, adminOnly, async (req, res) => {
