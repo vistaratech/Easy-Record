@@ -202,7 +202,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   }
 });
 
-app.post('/api/admin/permissions', async (req, res) => {
+app.post('/api/admin/permissions', authenticateToken, async (req, res) => {
   const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canEdit, canDownload }, ...]
   
   const client = await pool.connect();
@@ -251,14 +251,23 @@ app.get('/api/businesses', authenticateToken, async (req, res) => {
   const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
   const isAdmin = userRows.length > 0 && userRows[0].is_admin;
 
-  const { rows } = await pool.query(`
-    SELECT DISTINCT b.id, b.name, b.owner_id AS "ownerId", b.created_at AS "createdAt"
-    FROM businesses b
-    LEFT JOIN registers r ON r.business_id = b.id
-    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE p.can_view = TRUE
-    ORDER BY b.name
-  `, [userId]);
+  let rows;
+  if (isAdmin) {
+    // Admins see all businesses
+    const result = await pool.query(`SELECT id, name, owner_id AS "ownerId", created_at AS "createdAt" FROM businesses ORDER BY name`);
+    rows = result.rows;
+  } else {
+    // Users see businesses they own OR have at least one register with view permission
+    const result = await pool.query(`
+      SELECT DISTINCT b.id, b.name, b.owner_id AS "ownerId", b.created_at AS "createdAt"
+      FROM businesses b
+      LEFT JOIN registers r ON r.business_id = b.id AND r.deleted_at IS NULL
+      LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+      WHERE b.owner_id = $1 OR p.can_view = TRUE
+      ORDER BY b.name
+    `, [userId]);
+    rows = result.rows;
+  }
   res.json(rows);
 });
 app.post('/api/businesses', authenticateToken, async (req, res) => {
@@ -284,15 +293,25 @@ app.get('/api/folders', authenticateToken, async (req, res) => {
   }
 
   // Otherwise, return folders from ALL businesses the user owns or has permissions in
-  const { rows } = await pool.query(`
-    SELECT DISTINCT f.id, f.business_id AS "businessId", f.name, f.created_at AS "createdAt"
-    FROM folders f
-    INNER JOIN businesses b ON b.id = f.business_id
-    LEFT JOIN registers r ON r.folder_id = f.id
-    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE p.can_view = TRUE
-  `, [userId]);
-  res.json(rows);
+  const { rows: folderUserRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+  const isFolderAdmin = folderUserRows.length > 0 && folderUserRows[0].is_admin;
+
+  let folderRows;
+  if (isFolderAdmin) {
+    const result = await pool.query(`SELECT DISTINCT f.id, f.business_id AS "businessId", f.name, f.created_at AS "createdAt" FROM folders f ORDER BY f.name`);
+    folderRows = result.rows;
+  } else {
+    const result = await pool.query(`
+      SELECT DISTINCT f.id, f.business_id AS "businessId", f.name, f.created_at AS "createdAt"
+      FROM folders f
+      INNER JOIN businesses b ON b.id = f.business_id
+      LEFT JOIN registers r ON r.folder_id = f.id AND r.deleted_at IS NULL
+      LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+      WHERE b.owner_id = $1 OR p.can_view = TRUE
+    `, [userId]);
+    folderRows = result.rows;
+  }
+  res.json(folderRows);
 });
 app.post('/api/folders', authenticateToken, async (req, res) => {
   const { businessId, name } = req.body;
@@ -321,27 +340,42 @@ app.get('/api/registers', authenticateToken, async (req, res) => {
   const { businessId } = req.query;
   const userId = req.user.id;
 
-  // Check if admin
+  // Check if admin or owner
   const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
   const isAdmin = userRows.length > 0 && userRows[0].is_admin;
 
-  // Get registers that the user owns (via business) or has an explicit permission record for
-  const { rows } = await pool.query(`
-    SELECT DISTINCT
-      r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
-      r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
-      r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
-      CASE 
-        WHEN p.can_view = TRUE THEN TRUE
-        ELSE FALSE
-      END AS "hasAccess"
-    FROM registers r
-    LEFT JOIN businesses b ON b.id = r.business_id
-    LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
-    WHERE ($2::bigint IS NULL OR r.business_id = $2)
-      AND r.deleted_at IS NULL
-      AND (p.can_view = TRUE)
-  `, [userId, businessId || null]);
+  let rows;
+  if (isAdmin) {
+    // Admins see all registers
+    const result = await pool.query(`
+      SELECT DISTINCT
+        r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
+        r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
+        r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt", TRUE AS "hasAccess"
+      FROM registers r
+      WHERE ($1::bigint IS NULL OR r.business_id = $1)
+        AND r.deleted_at IS NULL
+      ORDER BY r.updated_at DESC
+    `, [businessId || null]);
+    rows = result.rows;
+  } else {
+    // Regular users: see registers they own (via business) OR have explicit view permission
+    const result = await pool.query(`
+      SELECT DISTINCT
+        r.id, r.business_id AS "businessId", r.folder_id AS "folderId", r.name, r.icon, r.icon_color AS "iconColor",
+        r.category, r.template, r.created_at AS "createdAt", r.updated_at AS "updatedAt", r.entry_count AS "entryCount",
+        r.last_activity AS "lastActivity", r.deleted_at AS "deletedAt",
+        CASE WHEN p.can_view = TRUE THEN TRUE ELSE FALSE END AS "hasAccess"
+      FROM registers r
+      LEFT JOIN businesses b ON b.id = r.business_id
+      LEFT JOIN user_permissions p ON p.register_id = r.id AND p.user_id = $1
+      WHERE ($2::bigint IS NULL OR r.business_id = $2)
+        AND r.deleted_at IS NULL
+        AND (b.owner_id = $1 OR p.can_view = TRUE)
+      ORDER BY r.updated_at DESC
+    `, [userId, businessId || null]);
+    rows = result.rows;
+  }
 
   res.json(rows);
 });
@@ -359,30 +393,39 @@ app.get('/api/registers/deleted', authenticateToken, async (req, res) => {
 
 app.get('/api/registers/:id', authenticateToken, async (req, res) => {
   const regId = req.params.id;
+  const userId = req.user.id;
+
   const { rows: regRows } = await pool.query(`SELECT id, business_id AS "businessId", folder_id AS "folderId", name, icon, icon_color AS "iconColor",
     category, template, columns, pages, share_link AS "shareLink", shared_with AS "sharedWith", deleted_items AS "deletedItems",
     entry_count AS "entryCount", last_activity AS "lastActivity", deleted_at AS "deletedAt",
     created_at AS "createdAt", updated_at AS "updatedAt" FROM registers WHERE id=$1`, [regId]);
   if (!regRows.length) return res.status(404).json({ error: 'Register not found' });
   const reg = regRows[0];
-  
+
+  // Check if admin or business owner
+  const { rows: userRows } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+  const isAdmin = userRows.length > 0 && userRows[0].is_admin;
+  const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [reg.businessId, userId]);
+  const isOwner = bizRows.length > 0;
+
   const { rows: perms } = await pool.query(
     'SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2',
-    [req.user.id, regId]
+    [userId, regId]
   );
-  
-  const hasPermissions = perms.length > 0;
-  
-  if (hasPermissions) {
+
+  if (isAdmin || isOwner) {
+    // Admins and owners always get full access; use explicit perms if available
+    if (perms.length > 0 && !perms[0].can_view) {
+      return res.status(403).json({ error: 'Forbidden: View access denied' });
+    }
+    reg.permissions = perms.length > 0
+      ? { canView: perms[0].can_view, canEdit: perms[0].can_edit, canDownload: perms[0].can_download }
+      : { canView: true, canEdit: true, canDownload: true };
+  } else if (perms.length > 0) {
     const p = perms[0];
     if (!p.can_view) return res.status(403).json({ error: 'Forbidden: View access denied' });
-    reg.permissions = {
-      canView: p.can_view,
-      canEdit: p.can_edit,
-      canDownload: p.can_download
-    };
+    reg.permissions = { canView: p.can_view, canEdit: p.can_edit, canDownload: p.can_download };
   } else {
-    // Even Admins/Owners need an explicit permission record now for visibility consistency
     return res.status(403).json({ error: 'Forbidden: No access record found' });
   }
 
@@ -507,50 +550,52 @@ app.post('/api/registers/:id/restore', authenticateToken, async (req, res) => {
 
 app.put('/api/registers/:id', authenticateToken, async (req, res) => {
   try {
-    // 1. Resolve and Validate IDs
+    // 1. Parse request body — CRITICAL: was referencing undefined `reg`, must use req.body
+    const reg = req.body;
     const id = req.params.id === 'NaN' ? null : req.params.id;
     if (!id) return res.status(400).json({ error: 'Invalid register ID provided.' });
 
+    // 2. Resolve Business ID
     let businessId = Number(reg.businessId);
     if (!businessId || isNaN(businessId)) {
       const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
       if (bizRows.length > 0) businessId = Number(bizRows[0].id);
     }
-
     if (!businessId || isNaN(businessId)) {
       return res.status(400).json({ error: 'A valid business is required to save a register.' });
     }
 
-    // 2. Check Permissions
+    // 3. Check Permissions
     const { rows: existing } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [id]);
-    
+    const { rows: saveUserRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
+    const saveUser = saveUserRows[0];
+    const saveIsAdmin = saveUser?.is_admin;
+
     if (existing.length > 0) {
-      // Existing register: Use standard permission check
-      if (!(await canEdit(req.user.id, id))) {
-        return res.status(403).json({ error: 'Permission denied: Edit access required' });
+      // Existing register: admins/owners can always edit; others need explicit canEdit
+      const { rows: bizOwner } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [existing[0].business_id, req.user.id]);
+      const isOwner = bizOwner.length > 0;
+      if (!saveIsAdmin && !isOwner) {
+        if (!(await canEdit(req.user.id, id))) {
+          return res.status(403).json({ error: 'Permission denied: Edit access required' });
+        }
       }
     } else {
       // New register: Check global creation permission
-      const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
-      const user = userRows[0];
-      const isAdmin = user?.is_admin;
-      const canCreateGlobal = user?.can_edit;
-      
+      const canCreateGlobal = saveUser?.can_edit;
       const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
       const isOwner = bizCheck.length > 0;
-      
-      if (!isAdmin && !isOwner && !canCreateGlobal) {
+      if (!saveIsAdmin && !isOwner && !canCreateGlobal) {
         return res.status(403).json({ error: 'Permission denied: Creation privilege required.' });
       }
-
       // Grant the creator full access by default for new registers
       await pool.query(
         'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING',
         [req.user.id, id]
       );
     }
-    
-    // 3. Upsert Register
+
+    // 4. Upsert Register
     await pool.query(`
       INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
@@ -570,23 +615,23 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
         entry_count=EXCLUDED.entry_count,
         updated_at=NOW()
     `, [
-      id, 
-      businessId, 
-      reg.folderId ? Number(reg.folderId) : null, 
-      reg.name, 
-      reg.icon || 'file-text', 
+      id,
+      businessId,
+      reg.folderId ? Number(reg.folderId) : null,
+      reg.name,
+      reg.icon || 'file-text',
       reg.iconColor || null,
-      reg.category || 'general', 
-      reg.template || reg.name, 
+      reg.category || 'general',
+      reg.template || reg.name,
       JSON.stringify(reg.columns || []),
-      JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]), 
+      JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]),
       reg.shareLink || null,
-      JSON.stringify(reg.sharedWith || []), 
-      JSON.stringify(reg.deletedItems || []), 
+      JSON.stringify(reg.sharedWith || []),
+      JSON.stringify(reg.deletedItems || []),
       Number(reg.entryCount) || (reg.entries ? reg.entries.length : 0)
     ]);
 
-    // 4. Upsert Entries (if provided)
+    // 5. Upsert Entries (if provided)
     if (reg.entries && reg.entries.length > 0) {
       await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
       const chunkSize = 1000;
@@ -595,24 +640,24 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
         const cValues = [];
         const cParams = [];
         for (let j = 0; j < chunk.length; j++) {
-           const e = chunk[j];
-           const entryId = Number(e.id) || (Number(id) + 5000 + i + j);
-           const offset = j * 6;
-           cValues.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
-           cParams.push(
-             entryId, 
-             id, 
-             Number(e.rowNumber || (i + j + 1)), 
-             JSON.stringify(e.cells || {}), 
-             JSON.stringify(e.cellStyles || {}), 
-             Number(e.pageIndex) || 0
-           );
+          const e = chunk[j];
+          const entryId = Number(e.id) || (Number(id) + 5000 + i + j);
+          const offset = j * 6;
+          cValues.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
+          cParams.push(
+            entryId,
+            id,
+            Number(e.rowNumber || (i + j + 1)),
+            JSON.stringify(e.cells || {}),
+            JSON.stringify(e.cellStyles || {}),
+            Number(e.pageIndex) || 0
+          );
         }
         await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${cValues.join(',')}`, cParams);
       }
     }
 
-    await logAction(pool, businessId, 'Update Register', `Updated register: ${reg.name}`, { registerId: id });
+    await logAction(pool, businessId, 'Update Register', `Updated register: ${reg.name || id}`, { registerId: id });
     res.json({ ok: true });
   } catch (err) {
     console.error('Register save error:', err);
@@ -892,8 +937,105 @@ async function logAction(db, businessId, action, details, meta = {}) {
   } catch (e) { console.error('Log failed:', e.message); }
 }
 
+// ── ADMIN USER MANAGEMENT ──
+// Fully delete a user — removes credentials, permissions, registers, and businesses
+app.delete('/api/admin/users/:userId', authenticateToken, adminOnly, async (req, res) => {
+  const { userId } = req.params;
+  const client = await pool.connect();
+  try {
+    // Prevent self-deletion
+    if (String(req.user.id) === String(userId)) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+
+    await client.query('BEGIN');
+
+    // 1. Delete all entries belonging to registers owned by this user
+    await client.query(`
+      DELETE FROM entries
+      WHERE register_id IN (
+        SELECT r.id FROM registers r
+        INNER JOIN businesses b ON b.id = r.business_id
+        WHERE b.owner_id = $1
+      )
+    `, [userId]);
+
+    // 2. Delete all registers owned by this user's businesses
+    await client.query(`
+      DELETE FROM registers
+      WHERE business_id IN (SELECT id FROM businesses WHERE owner_id = $1)
+    `, [userId]);
+
+    // 3. Delete folders
+    await client.query(`
+      DELETE FROM folders
+      WHERE business_id IN (SELECT id FROM businesses WHERE owner_id = $1)
+    `, [userId]);
+
+    // 4. Delete businesses
+    await client.query('DELETE FROM businesses WHERE owner_id = $1', [userId]);
+
+    // 5. Delete user_permissions (where this user had access to other registers)
+    await client.query('DELETE FROM user_permissions WHERE user_id = $1', [userId]);
+
+    // 6. Delete backups
+    await client.query(`
+      DELETE FROM backups
+      WHERE business_id IN (SELECT id FROM businesses WHERE owner_id = $1)
+    `, [userId]);
+
+    // 7. Finally delete the user account
+    const { rowCount } = await client.query('DELETE FROM users WHERE id = $1', [userId]);
+    if (rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await client.query('COMMIT');
+    console.log(`Admin ${req.user.id} deleted user ${userId}`);
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  } finally {
+    client.release();
+  }
+});
+
+// Reset a user's password (admin sets a temporary password)
+app.post('/api/admin/users/:userId/reset-password', authenticateToken, adminOnly, async (req, res) => {
+  const { userId } = req.params;
+  const tempPassword = Math.random().toString(36).slice(-8);
+  try {
+    const hashed = await bcrypt.hash(tempPassword, 10);
+    const { rowCount } = await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, userId]);
+    if (rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, tempPassword }); // In production, send via email instead
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Enable or disable a user account
+app.put('/api/admin/users/:userId/status', authenticateToken, adminOnly, async (req, res) => {
+  const { userId } = req.params;
+  const { isDisabled } = req.body;
+  try {
+    // Requires a `disabled` column — add with: ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
+    await pool.query('UPDATE users SET disabled = $1 WHERE id = $2', [!!isDisabled, userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    // Column may not exist yet — gracefully handle
+    console.error('Status update error (column may be missing):', err.message);
+    res.status(500).json({ error: 'Failed to update user status' });
+  }
+});
+
 // ── HEALTH ──
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
 
 // ── GLOBAL ERROR HANDLER ──
 app.use((err, req, res, next) => {

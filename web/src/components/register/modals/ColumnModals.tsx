@@ -1,4 +1,4 @@
-import { AlertCircle, X, Plus } from 'lucide-react';
+import { AlertCircle, X, Plus, AlertTriangle, Check } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { 
   Calculator, PlusCircle, MinusCircle, XCircle, DivideCircle, 
@@ -160,6 +160,8 @@ function FormulaBuilder({ formula, onChange, columns, entries, outputName, exclu
     };
   }, [formula, entries, columns]);
 
+  const duplicateColsInFormula = columns.filter(c => c.id !== excludeId && formula.split(`{${c.name}}`).length > 2);
+
   return (
     <div className="formula-builder" style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-light)', borderRadius: '8px', border: '1px solid var(--border)' }}>
       <div className="formula-mode-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
@@ -173,7 +175,7 @@ function FormulaBuilder({ formula, onChange, columns, entries, outputName, exclu
         <button 
           className={`mode-tab ${mode === 'custom' ? 'active' : ''}`} 
           onClick={() => setMode('custom')}
-          style={{ flex: 1, padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: mode === 'custom' ? 'var(--navy)' : 'white', color: mode === 'custom' ? 'white' : 'var(--text-main)', cursor: 'pointer', fontWeight: mode === 'custom' ? 600 : 400 }}
+          style={{ flex: 1, padding: '8px', fontSize: '13px', borderRadius: '8px', border: '1px solid var(--border)', background: mode === 'custom' ? 'var(--navy)' : 'white', color: mode === 'custom' ? 'white' : 'var(--text-main)', cursor: 'pointer', fontWeight: mode === 'custom' ? 700 : 500, transition: 'all 0.2s' }}
         >
           Custom Formula (Advanced)
         </button>
@@ -349,14 +351,22 @@ function FormulaBuilder({ formula, onChange, columns, entries, outputName, exclu
         </div>
       ) : (
         <div className="custom-editor">
-          <label className="modal-label" style={{ fontSize: '11px' }}>Formula</label>
-          <input 
-            ref={inputRef}
-            className="modal-input" 
+          <label className="modal-label" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Formula Expression</label>
+          <textarea 
+            ref={inputRef as any}
+            className="modal-textarea" 
             value={formula} 
             onChange={(e) => onChange(e.target.value)} 
-            placeholder="e.g. {A} + {B} * 0.18" 
+            placeholder="e.g. {Marks} / {Full Marks} * 100"
+            style={{ minHeight: '100px', fontSize: '15px', fontWeight: 600, fontFamily: 'monospace', borderColor: duplicateColsInFormula.length > 0 ? '#ef4444' : undefined }}
           />
+          
+          {duplicateColsInFormula.length > 0 && (
+            <div style={{ marginTop: '4px', fontSize: '12px', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+              <AlertTriangle size={14} /> 
+              Warning: Columns cannot be used multiple times ({duplicateColsInFormula.map(c => `{${c.name}}`).join(', ')})
+            </div>
+          )}
           
           <div style={{ marginTop: '8px', marginBottom: '12px' }}>
             <label style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', marginBottom: '6px' }}>Operators:</label>
@@ -406,37 +416,73 @@ function FormulaBuilder({ formula, onChange, columns, entries, outputName, exclu
             </div>
           </div>
 
-          <div style={{ marginTop: '8px' }}>
-            <label style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Insert Column:</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-              {columns.filter(c => c.id !== excludeId).map(c => (
-                <button 
-                  key={c.id} 
-                  onClick={() => insertText(`{${c.name}}`)}
-                  style={{ 
-                    padding: '4px 10px', 
-                    fontSize: '11px', 
-                    fontWeight: 500,
-                    borderRadius: '6px', 
-                    border: '1px solid var(--border)', 
-                    background: 'white', 
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    color: 'var(--text-main)'
-                  }}
-                  type="button"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-light)';
-                    e.currentTarget.style.borderColor = 'var(--primary-light)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'white';
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                  }}
-                >
-                  +{c.name}
-                </button>
-              ))}
+          <div style={{ marginTop: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', marginBottom: '8px', fontWeight: 700, textTransform: 'uppercase' }}>Select Columns to Insert:</label>
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '6px', 
+              padding: '12px', 
+              background: 'white', 
+              border: '1px solid var(--border)', 
+              borderRadius: '10px',
+              minHeight: '160px',
+              maxHeight: '250px',
+              overflowY: 'auto',
+              alignContent: 'flex-start',
+              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+            }}>
+              {columns.filter(c => c.id !== excludeId).map(c => {
+                const isUsed = formula.includes(`{${c.name}}`);
+                return (
+                  <button 
+                    key={c.id} 
+                    onClick={() => {
+                      if (!isUsed) insertText(`{${c.name}}`);
+                    }}
+                    style={{ 
+                      padding: '6px 12px', 
+                      fontSize: '12px', 
+                      fontWeight: 600,
+                      borderRadius: '8px', 
+                      border: isUsed ? '1px solid #fca5a5' : '1px solid var(--border)', 
+                      background: isUsed ? '#fef2f2' : 'var(--bg-light)', 
+                      cursor: isUsed ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      color: isUsed ? '#dc2626' : 'var(--navy)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      opacity: isUsed ? 0.8 : 1
+                    }}
+                    type="button"
+                    onMouseEnter={(e) => {
+                      if (!isUsed) {
+                        e.currentTarget.style.background = 'white';
+                        e.currentTarget.style.borderColor = 'var(--navy)';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isUsed) {
+                        e.currentTarget.style.background = 'var(--bg-light)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
+                    title={isUsed ? 'Column already added' : `Insert ${c.name}`}
+                  >
+                    {c.name}
+                  </button>
+                );
+              })}
+              {columns.filter(c => c.id !== excludeId).length === 0 && (
+                <div style={{ width: '100%', textAlign: 'center', color: 'var(--muted)', fontSize: '12px', padding: '20px' }}>
+                  No other columns available to reference.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -496,7 +542,7 @@ const presetBtnStyle = (active: boolean) => ({
   cursor: 'pointer', transition: 'all 0.2s'
 });
 
-function OptionsEditor({ value, onChange }: { value: string, onChange: (v: string) => void }) {
+function OptionsEditor({ value, onChange, columnData = [] }: { value: string, onChange: (v: string) => void, columnData?: string[] }) {
   const [opts, setOpts] = useState<string[]>(() => value ? value.split(',') : []);
   const lastSentValue = useRef(value);
   
@@ -516,39 +562,122 @@ function OptionsEditor({ value, onChange }: { value: string, onChange: (v: strin
 
   return (
     <div className="options-editor-container">
-      {opts.map((opt, i) => (
-        <div key={i} className="options-editor-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
-          <input 
-            className="modal-input" 
-            style={{ marginBottom: 0 }} 
-            value={opt} 
-            onChange={(e) => {
-              const newOpts = [...opts];
-              newOpts[i] = e.target.value;
-              updateOpts(newOpts);
-            }} 
-            placeholder="Option name" 
-          />
-          <button 
-            type="button" 
-            onClick={() => {
-              const newOpts = [...opts];
-              newOpts.splice(i, 1);
-              updateOpts(newOpts);
-            }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '4px' }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <label className="modal-label" style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>
+          Predefined Options ({opts.length})
+        </label>
+        <button 
+          type="button" 
+          onClick={() => { if (confirm('Clear all options?')) updateOpts([]); }}
+          style={{ fontSize: '11px', color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+        >
+          Clear All
+        </button>
+      </div>
+
+      <div className="options-list-scroll" style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '12px', paddingRight: '4px' }}>
+        {opts.length === 0 ? (
+          <div style={{ padding: '20px', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: '8px', color: 'var(--muted)', fontSize: '12px', background: 'var(--bg-light)' }}>
+            No predefined options yet. Add some below or pick from existing data.
+          </div>
+        ) : (
+          opts.map((opt, i) => (
+            <div key={i} className="options-editor-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-light)', color: 'var(--muted)', fontSize: '10px', fontWeight: 700 }}>
+                {i + 1}
+              </div>
+              <input 
+                className="modal-input" 
+                style={{ marginBottom: 0, flex: 1, height: '36px', fontSize: '13px' }} 
+                value={opt} 
+                onChange={(e) => {
+                  const newOpts = [...opts];
+                  newOpts[i] = e.target.value;
+                  updateOpts(newOpts);
+                }} 
+                placeholder="Option name" 
+              />
+              <button 
+                type="button" 
+                onClick={() => {
+                  const newOpts = [...opts];
+                  newOpts.splice(i, 1);
+                  updateOpts(newOpts);
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '6px', opacity: 0.6, transition: 'opacity 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
       <button 
         type="button" 
         onClick={() => updateOpts([...opts, `Option ${opts.length + 1}`])}
-        style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: '1px dashed var(--border)', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer', color: 'var(--navy)', width: '100%', justifyContent: 'center', fontSize: '13px', fontWeight: 500 }}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', color: 'var(--navy)', width: '100%', justifyContent: 'center', fontSize: '13px', fontWeight: 600, marginBottom: '20px', transition: 'all 0.2s' }}
+        onMouseEnter={(e) => e.currentTarget.style.background = 'white'}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--bg-light)'}
       >
-        <Plus size={14} /> Add Option
+        <Plus size={16} /> Add New Option
       </button>
+
+      {columnData.length > 0 && (
+        <div className="suggestions-section" style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <label className="modal-label" style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>
+              Suggestions from existing data
+            </label>
+            <button 
+              type="button" 
+              onClick={() => {
+                const newOnes = columnData.filter(d => !opts.some(o => o.toLowerCase() === d.toLowerCase()));
+                if (newOnes.length > 0) updateOpts([...opts, ...newOnes]);
+              }}
+              style={{ fontSize: '11px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Add All
+            </button>
+          </div>
+          <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '10px' }}>
+            These values are already present in this column. Click to add them as official options.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '120px', overflowY: 'auto', padding: '2px' }}>
+            {columnData.map((data, idx) => {
+              const isAlreadyOption = opts.some(o => o.toLowerCase() === data.toLowerCase());
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  disabled={isAlreadyOption}
+                  onClick={() => updateOpts([...opts, data])}
+                  style={{ 
+                    padding: '6px 12px', 
+                    fontSize: '12px', 
+                    borderRadius: '20px', 
+                    border: '1px solid var(--border)', 
+                    background: isAlreadyOption ? 'var(--bg-light)' : 'white',
+                    color: isAlreadyOption ? 'var(--muted)' : 'var(--navy)',
+                    cursor: isAlreadyOption ? 'default' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => { if (!isAlreadyOption) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                  onMouseLeave={(e) => { if (!isAlreadyOption) e.currentTarget.style.borderColor = 'var(--border)'; }}
+                >
+                  {isAlreadyOption ? <Check size={12} /> : <Plus size={12} />}
+                  {data}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -624,7 +753,7 @@ export function ColumnModals(props: ColumnModalsProps) {
       {/* ── Add New Column ── */}
       {newColumnModal && (
         <div className="modal-overlay" onClick={() => setNewColumnModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className={`modal-content ${newColType === 'formula' ? 'modal-content--formula' : ''}`} onClick={(e) => e.stopPropagation()}>
             <h3 className="modal-title">Add New Column</h3>
             <label className="modal-label">Column Name</label>
             <input className="modal-input" value={newColName} onChange={(e) => setNewColName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && newColName.trim() && addColumnMutation.mutate()} placeholder="e.g. Amount" autoFocus />
@@ -639,7 +768,11 @@ export function ColumnModals(props: ColumnModalsProps) {
             {newColType === 'dropdown' && (
               <>
                 <label className="modal-label" style={{ marginTop: '12px', display: 'block', marginBottom: '8px' }}>Options</label>
-                <OptionsEditor value={newColDropdownOpts} onChange={setNewColDropdownOpts} />
+                <OptionsEditor 
+                  value={newColDropdownOpts} 
+                  onChange={setNewColDropdownOpts} 
+                  columnData={[]} // No column data for new column
+                />
               </>
             )}
             {newColType === 'formula' && (
@@ -682,7 +815,24 @@ export function ColumnModals(props: ColumnModalsProps) {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3 className="modal-title">Edit Dropdown Options</h3>
             <label className="modal-label" style={{ marginBottom: '8px', display: 'block' }}>Options</label>
-            <OptionsEditor value={dropdownConfigOptions} onChange={setDropdownConfigOptions} />
+            <OptionsEditor 
+              value={dropdownConfigOptions} 
+              onChange={setDropdownConfigOptions} 
+              columnData={(() => {
+                if (activeModalColId == null || !entries) return [];
+                const colIdStr = activeModalColId.toString();
+                const seen = new Set<string>();
+                const unique: string[] = [];
+                entries.forEach(e => {
+                  const val = e.cells?.[colIdStr]?.trim();
+                  if (val && !seen.has(val.toLowerCase())) {
+                    seen.add(val.toLowerCase());
+                    unique.push(val);
+                  }
+                });
+                return unique;
+              })()}
+            />
             <div className="modal-actions">
               <button className="modal-cancel-btn" onClick={() => setDropdownConfigModal(false)}>Cancel</button>
               <button className="modal-confirm-btn" onClick={() => updateDropdownMutation.mutate()}>Save</button>
@@ -694,7 +844,7 @@ export function ColumnModals(props: ColumnModalsProps) {
       {/* ── Change Type ── */}
       {changeTypeModal && (
         <div className="modal-overlay" onClick={() => setChangeTypeModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className={`modal-content ${changeTypeValue === 'formula' ? 'modal-content--formula' : ''}`} onClick={(e) => e.stopPropagation()}>
             <h3 className="modal-title">Change Column Type</h3>
             <p className="modal-p-text">Changing the type may affect existing data in this column.</p>
             <div className="type-chips">
@@ -704,12 +854,7 @@ export function ColumnModals(props: ColumnModalsProps) {
                 </button>
               ))}
             </div>
-            {changeTypeValue === 'dropdown' && (
-              <>
-                <label className="modal-label" style={{ marginTop: '12px', display: 'block', marginBottom: '8px' }}>Options</label>
-                <OptionsEditor value={newColDropdownOpts} onChange={setNewColDropdownOpts} />
-              </>
-            )}
+
             {changeTypeValue === 'formula' && (
               <FormulaBuilder 
                 formula={newColFormula} 
@@ -731,7 +876,7 @@ export function ColumnModals(props: ColumnModalsProps) {
       {/* ── Insert Column ── */}
       {insertColModal !== null && (
         <div className="modal-overlay" onClick={() => setInsertColModal(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className={`modal-content ${newColType === 'formula' ? 'modal-content--formula' : ''}`} onClick={(e) => e.stopPropagation()}>
             <h3 className="modal-title">Insert Column {insertColModal === 'left' ? 'Left' : 'Right'}</h3>
             <label className="modal-label">Column Name</label>
             <input className="modal-input" value={newColName} onChange={(e) => setNewColName(e.target.value)} placeholder="e.g. Amount" autoFocus />
@@ -746,7 +891,24 @@ export function ColumnModals(props: ColumnModalsProps) {
             {newColType === 'dropdown' && (
               <>
                 <label className="modal-label" style={{ marginTop: '12px', display: 'block', marginBottom: '8px' }}>Options</label>
-                <OptionsEditor value={newColDropdownOpts} onChange={setNewColDropdownOpts} />
+                <OptionsEditor 
+                  value={newColDropdownOpts} 
+                  onChange={setNewColDropdownOpts} 
+                  columnData={(() => {
+                    if (activeModalColId == null || !entries) return [];
+                    const colIdStr = activeModalColId.toString();
+                    const seen = new Set<string>();
+                    const unique: string[] = [];
+                    entries.forEach(e => {
+                      const val = e.cells?.[colIdStr]?.trim();
+                      if (val && !seen.has(val.toLowerCase())) {
+                        seen.add(val.toLowerCase());
+                        unique.push(val);
+                      }
+                    });
+                    return unique;
+                  })()}
+                />
               </>
             )}
             {newColType === 'formula' && (
@@ -760,7 +922,20 @@ export function ColumnModals(props: ColumnModalsProps) {
             )}
             <div className="modal-actions">
               <button className="modal-cancel-btn" onClick={() => setInsertColModal(null)}>Cancel</button>
-              <button className="modal-confirm-btn" disabled={!newColName.trim()} onClick={() => insertColumnMutation.mutate()}>Insert Column</button>
+              <button className="modal-confirm-btn" disabled={!newColName.trim()} onClick={() => {
+                // Pre-calculate position HERE (click-time snapshot) before modal state is cleared
+                const targetCol = columns.find(c => c.id === activeModalColId);
+                const pos = targetCol
+                  ? (insertColModal === 'left' ? targetCol.position : targetCol.position + 1)
+                  : columns.length;
+                insertColumnMutation.mutate({
+                  pos,
+                  name: newColName,
+                  type: newColType,
+                  dropdownOpts: newColDropdownOpts,
+                  formula: newColFormula,
+                });
+              }}>Insert Column</button>
             </div>
           </div>
         </div>

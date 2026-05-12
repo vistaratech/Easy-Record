@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../lib/auth';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { listBusinesses, createBusiness, createRegister, type RegisterSummary } from '../lib/api';
@@ -10,6 +9,7 @@ import {
   Utensils, Dumbbell, Building2, User, ShieldCheck, Leaf, Plane,
   Phone, Mail, Globe, Star, CheckSquare, Image, Plus
 } from 'lucide-react';
+import { useEffect } from 'react';
 
 import { CategoryCard } from '../components/templates/CategoryCard';
 import { TemplateModal } from '../components/templates/TemplateModal';
@@ -38,15 +38,8 @@ function getColTypeIcon(type: string) {
 }
 
 export default function TemplatesPage() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (user && !user.isAdmin && !user.canEdit) {
-      navigate('/');
-    }
-  }, [user, navigate]);
   const { categoryId } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryId || null);
   const [creatingTemplate, setCreatingTemplate] = useState<string | null>(null);
@@ -123,6 +116,7 @@ export default function TemplatesPage() {
               count={cat.id === 'blank' ? 0 : (TEMPLATES[cat.id] || []).length} 
               onClick={() => {
                 if (cat.id === 'blank') {
+                  if (!businessId) return;
                   setCreatingTemplate('Blank Register');
                   createMutation.mutate({
                     name: 'Blank Register',
@@ -145,6 +139,7 @@ export default function TemplatesPage() {
         categoryData={categoryData} subTemplates={subTemplates}
         creatingTemplate={creatingTemplate}
         handleCreate={(tpl) => { 
+          if (!businessId) return; // Prevent creation if businessId isn't loaded yet
           setCreatingTemplate(tpl.name); 
           createMutation.mutate(tpl); 
         }}

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { type Column } from '../../lib/api';
+import { formatCurrency } from '../../lib/formatters';
 
 interface RegisterSummaryRowProps {
   visibleColumns: Column[];
@@ -10,6 +11,8 @@ interface RegisterSummaryRowProps {
   onAddRecord: () => void;
   useColVirtual: boolean;
   virtualCols: any[];
+  beforeVirtualCols?: { index: number }[];
+  afterVirtualCols?: { index: number }[];
   paddingLeft: number;
   paddingRight: number;
   columnStats: Record<number, string | number>;
@@ -27,6 +30,8 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
   onAddRecord,
   useColVirtual,
   virtualCols,
+  beforeVirtualCols,
+  afterVirtualCols,
   paddingLeft,
   paddingRight,
   columnStats,
@@ -40,9 +45,26 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
   }, [calcTypes]);
 
   const renderCells = () => {
-    const colItems = useColVirtual ? virtualCols : visibleColumns.map((_, i) => ({ index: i }));
-    
-    return colItems.map((vc) => {
+    const elements: { type: 'cell' | 'pad-left' | 'pad-right', vc?: { index: number } }[] = [];
+    if (useColVirtual && beforeVirtualCols && afterVirtualCols) {
+      beforeVirtualCols.forEach(vc => elements.push({ type: 'cell', vc }));
+      if (paddingLeft > 0) elements.push({ type: 'pad-left' });
+      virtualCols.forEach(vc => elements.push({ type: 'cell', vc }));
+      if (paddingRight > 0) elements.push({ type: 'pad-right' });
+      afterVirtualCols.forEach(vc => elements.push({ type: 'cell', vc }));
+    } else {
+      visibleColumns.forEach((_, i) => elements.push({ type: 'cell', vc: { index: i } }));
+    }
+
+    return elements.map((el) => {
+      if (el.type === 'pad-left') {
+        return <td key="pad-left" className="spacer" style={{ width: paddingLeft, minWidth: paddingLeft, padding: 0, border: 'none', background: 'var(--table-bg)' }} />;
+      }
+      if (el.type === 'pad-right') {
+        return <td key="pad-right" className="spacer" style={{ width: paddingRight, minWidth: paddingRight, padding: 0, border: 'none', background: 'var(--table-bg)' }} />;
+      }
+
+      const vc = el.vc!;
       const col = visibleColumns[vc.index];
       if (!col) return null;
 
@@ -76,7 +98,11 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
                 {calcType === 'average' && 'μ '}
                 {calcType.toUpperCase()}:
               </span>
-              <span className="calc-value">{calcValue}</span>
+              <span className="calc-value">
+                {col.type === 'currency' && (calcType === 'sum' || calcType === 'average' || calcType === 'min' || calcType === 'max')
+                  ? formatCurrency(calcValue)
+                  : calcValue}
+              </span>
             </div>
           ) : (
             <div className="calc-cell-inner">
@@ -102,9 +128,9 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
             position: 'sticky',
             left: 0,
             zIndex: 12,
-            width: 50,
-            minWidth: 50,
-            maxWidth: 50
+            width: 60,
+            minWidth: 60,
+            maxWidth: 60
           }}
         >
           <div className="calc-cell-inner">
@@ -126,15 +152,7 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
           </div>
         </td>
 
-        {useColVirtual && paddingLeft > 0 && (
-          <td key="pad-left" className="spacer" style={{ width: paddingLeft, minWidth: paddingLeft, padding: 0, border: 'none', background: 'var(--table-bg)' }} />
-        )}
-
         {renderCells()}
-
-        {useColVirtual && paddingRight > 0 && (
-          <td key="pad-right" className="spacer" style={{ width: paddingRight, minWidth: paddingRight, padding: 0, border: 'none', background: 'var(--table-bg)' }} />
-        )}
 
         {/* Action Column Placeholder */}
         <td className="calc-cell-td actions" style={{ width: '50px', minWidth: '50px', background: 'var(--table-bg)', position: 'sticky', right: 0, zIndex: 13, borderLeft: '1px solid var(--border-v)' }} />

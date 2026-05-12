@@ -107,7 +107,7 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
                 style={{
                   padding: '14px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', transition: 'all 0.2s',
                   border: `2px solid ${format === 'pdf' ? 'var(--primary)' : 'var(--border)'}`,
-                  background: format === 'pdf' ? '#eff6ff' : '#fff',
+                  background: format === 'pdf' ? 'rgba(0, 45, 93, 0.05)' : '#fff',
                 }}
               >
                 <div style={{ color: format === 'pdf' ? 'var(--primary)' : 'var(--muted)' }}>
@@ -123,7 +123,7 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
                 style={{
                   padding: '14px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', transition: 'all 0.2s',
                   border: `2px solid ${format === 'excel' ? 'var(--primary)' : 'var(--border)'}`,
-                  background: format === 'excel' ? '#eff6ff' : '#fff',
+                  background: format === 'excel' ? 'rgba(0, 45, 93, 0.05)' : '#fff',
                 }}
               >
                 <div style={{ color: format === 'excel' ? 'var(--primary)' : 'var(--muted)' }}>
@@ -143,14 +143,14 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
                 <Type size={14} /> Document Settings
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                <div onClick={() => setIncludeHeading(!includeHeading)} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: includeHeading ? '#eff6ff' : '#fff', transition: 'all 0.2s' }}>
+                <div onClick={() => setIncludeHeading(!includeHeading)} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: includeHeading ? 'rgba(0, 45, 93, 0.05)' : '#fff', transition: 'all 0.2s' }}>
                   <div style={{ color: includeHeading ? 'var(--primary)' : 'var(--muted)' }}>
                     {includeHeading ? <CheckSquare size={20} strokeWidth={2.5} /> : <Square size={20} strokeWidth={2} />}
                   </div>
                   <div style={{ fontSize: '13px', fontWeight: includeHeading ? 600 : 500, color: includeHeading ? 'var(--primary-dark, #1e1b4b)' : 'var(--text-color)' }}>Include Heading</div>
                 </div>
 
-                <div onClick={() => setIncludeDateTime(!includeDateTime)} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: includeDateTime ? '#eff6ff' : '#fff', transition: 'all 0.2s' }}>
+                <div onClick={() => setIncludeDateTime(!includeDateTime)} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: includeDateTime ? 'rgba(0, 45, 93, 0.05)' : '#fff', transition: 'all 0.2s' }}>
                   <div style={{ color: includeDateTime ? 'var(--primary)' : 'var(--muted)' }}>
                     {includeDateTime ? <CheckSquare size={20} strokeWidth={2.5} /> : <Square size={20} strokeWidth={2} />}
                   </div>
@@ -165,14 +165,14 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
                 <List size={14} /> Rows to Export
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                <div onClick={() => setExportRows('all')} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: exportRows === 'all' ? '#eff6ff' : '#fff', transition: 'all 0.2s' }}>
+                <div onClick={() => setExportRows('all')} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: exportRows === 'all' ? 'rgba(0, 45, 93, 0.05)' : '#fff', transition: 'all 0.2s' }}>
                   <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: `2px solid ${exportRows === 'all' ? 'var(--primary)' : 'var(--muted)'}`, padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {exportRows === 'all' && <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)' }} />}
                   </div>
                   <div style={{ fontSize: '13px', fontWeight: exportRows === 'all' ? 600 : 500, color: exportRows === 'all' ? 'var(--primary-dark, #1e1b4b)' : 'var(--text-color)' }}>All Rows <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 400 }}>({totalRowCount})</span></div>
                 </div>
 
-                <div onClick={() => { if (selectedRowCount > 0) setExportRows('selected'); }} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: selectedRowCount === 0 ? 'not-allowed' : 'pointer', opacity: selectedRowCount === 0 ? 0.5 : 1, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: exportRows === 'selected' ? '#eff6ff' : '#fff', transition: 'all 0.2s' }}>
+                <div onClick={() => { if (selectedRowCount > 0) setExportRows('selected'); }} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: selectedRowCount === 0 ? 'not-allowed' : 'pointer', opacity: selectedRowCount === 0 ? 0.5 : 1, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: '8px', background: exportRows === 'selected' ? 'rgba(0, 45, 93, 0.05)' : '#fff', transition: 'all 0.2s' }}>
                   <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: `2px solid ${exportRows === 'selected' ? 'var(--primary)' : 'var(--muted)'}`, padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {exportRows === 'selected' && <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)' }} />}
                   </div>
@@ -192,7 +192,7 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
                 <button onClick={handleSelectAll} style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>Select All</button>
                 <span style={{ color: 'var(--border)' }}>|</span>
                 <button onClick={handleDeselectAll} style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>None</button>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', background: '#e0e7ff', padding: '2px 8px', borderRadius: '12px', marginLeft: '4px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', background: 'rgba(0, 45, 93, 0.1)', padding: '2px 8px', borderRadius: '12px', marginLeft: '4px' }}>
                   {selectedColIds.size} / {columns.filter(c => c.type !== 'image').length}
                 </span>
               </div>
@@ -209,7 +209,7 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
                     style={{ 
                       display: 'flex', alignItems: 'center', padding: '12px 16px', 
                       borderBottom: '1px solid var(--border)', cursor: 'pointer', gap: '14px', 
-                      background: isSelected ? '#eff6ff' : '#fff', 
+                      background: isSelected ? 'rgba(0, 45, 93, 0.05)' : '#fff', 
                       transition: 'all 0.2s ease',
                       borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent'
                     }}
@@ -232,8 +232,8 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
         </div>
 
         <div className="modal-footer" style={{ borderTop: '1px solid var(--border)', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa', flexShrink: 0 }}>
-          <button className="btn-secondary" onClick={onClose} style={{ padding: '10px 20px', borderRadius: '8px', fontWeight: 600 }}>Cancel</button>
-          <button className="btn-primary" onClick={handleExportClick} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', borderRadius: '8px', fontWeight: 600, boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>
+          <button className="modal-cancel-btn" onClick={onClose} style={{ padding: '10px 20px', borderRadius: '8px', fontWeight: 600 }}>Cancel</button>
+          <button className="modal-confirm-btn" onClick={handleExportClick} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', borderRadius: '8px', fontWeight: 600, boxShadow: '0 4px 12px rgba(0, 45, 93, 0.2)' }}>
             <FileDown size={18} /> Download {format === 'pdf' ? 'PDF' : 'Excel'}
           </button>
         </div>

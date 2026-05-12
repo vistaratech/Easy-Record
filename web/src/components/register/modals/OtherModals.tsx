@@ -71,12 +71,35 @@ export function OtherModals(props: OtherModalsProps) {
   ];
 
   // Always use the latest options from the columns prop to ensure optimistic updates are reflected
+  // AND fetch all unique existing values from that column across all entries (Excel/Sheets behavior)
   const liveDropdownOptions = useMemo(() => {
-    let rawOptions = dropdownOptions;
-    if (dropdownColumnId != null && columns) {
+    if (!dropdownModal || dropdownColumnId == null) return [];
+
+    let rawOptions: string[] = [];
+    
+    // 1. Get predefined options from the column definition
+    if (columns) {
       const col = columns.find(c => c.id === dropdownColumnId);
-      if (col?.dropdownOptions) rawOptions = col.dropdownOptions;
+      if (col?.dropdownOptions) rawOptions = [...col.dropdownOptions];
     }
+
+    // If no predefined options, use the ones passed from the trigger (fallback)
+    if (rawOptions.length === 0 && dropdownOptions.length > 0) {
+      rawOptions = [...dropdownOptions];
+    }
+
+    // 2. Fetch all unique existing values from this column across all entries
+    // ONLY if no predefined options are set. This gives users full control once they define options.
+    if (rawOptions.length === 0) {
+      const colIdStr = dropdownColumnId.toString();
+      localEntries.forEach(entry => {
+        const val = entry.cells?.[colIdStr];
+        if (val && val.trim() !== '') {
+          rawOptions.push(val.trim());
+        }
+      });
+    }
+
     // Normalize and remove duplicates (case-insensitive for uniqueness check, but preserve first casing found)
     const seen = new Set<string>();
     const unique: string[] = [];
@@ -91,7 +114,7 @@ export function OtherModals(props: OtherModalsProps) {
       }
     });
     return unique;
-  }, [columns, dropdownColumnId, dropdownOptions]);
+  }, [dropdownModal, columns, dropdownColumnId, dropdownOptions, localEntries]);
 
   // Reset search when modal opens/closes
   useEffect(() => {

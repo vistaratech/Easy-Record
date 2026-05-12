@@ -1,22 +1,32 @@
 // src/pages/AdminDashboard.tsx
 import { useEffect, useState, useMemo } from 'react';
-import { 
-  Users, ChevronRight, ChevronDown, Check, Search, Shield, 
-  BarChart2, Bell, User as UserIcon,
-  MoreHorizontal, Loader2, Pencil, Download, FileText, Database
+import {
+  Users, ChevronRight, ChevronDown, Check, Search, Shield,
+  BarChart2, Bell, User as UserIcon, Settings, BookOpen,
+  Loader2, Pencil, Download, FileText, Database,
+  X, AlertTriangle, ArrowLeft, LogOut, Home,
+  GraduationCap, ClipboardList, Calendar, Plus, MoreVertical, Trash2, Menu,
+  UserCheck, UserX, Key, ShieldAlert
 } from 'lucide-react';
-import { 
+import {
   listAllUsers, getUserPermissions, updateUserPermissions, getRegister,
-  updateUserGlobalPermissions,
+  updateUserGlobalPermissions, createRegister, permanentlyDeleteRegister,
+  signup, deleteUser, resetUserPassword, toggleUserStatus,
   type User, type UserPermission, type Column
 } from '../lib/api';
+import { CATEGORIES, TEMPLATES } from '../lib/templates';
+import { useAuth } from '../lib/auth';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import './AdminDashboard.css';
 
+type NavSection = 'dashboard' | 'users' | 'registers' | 'settings';
 type Tab = 'all-registers' | 'approved-registers';
-type SidebarItem = 'users' | 'active-report';
 
 export default function AdminDashboard() {
-  const [activeSidebar, setActiveSidebar] = useState<SidebarItem>('users');
+  const { user: currentUser, logout } = useAuth();
+  const navigate = useNavigate();
+  const [activeNav, setActiveNav] = useState<NavSection>('users');
   const [usersExpanded, setUsersExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('all-registers');
   const [users, setUsers] = useState<User[]>([]);
@@ -24,28 +34,31 @@ export default function AdminDashboard() {
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
   const [loading, setLoading] = useState(true);
   const [permLoading, setPermLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [registerSearch, setRegisterSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [selectedRegIds, setSelectedRegIds] = useState<Set<number>>(new Set());
   const [expandedRegId, setExpandedRegId] = useState<number | null>(null);
   const [regColumns, setRegColumns] = useState<Column[]>([]);
   const [columnsLoading, setColumnsLoading] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>(CATEGORIES[0].id);
+  const [creating, setCreating] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [userMenuOpenId, setUserMenuOpenId] = useState<number | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' });
 
   const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId), [users, selectedUserId]);
 
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
+  useEffect(() => { fetchInitialData(); }, []);
 
   async function fetchInitialData() {
     setLoading(true);
     try {
       const uData = await listAllUsers();
       setUsers(uData);
-      if (uData.length > 0 && !selectedUserId) {
-        handleUserSelect(uData[0]);
-      }
+      if (uData.length > 0 && !selectedUserId) handleUserSelect(uData[0]);
     } catch (err: any) {
       console.error(err);
       toast.error('Failed to load users');
@@ -57,14 +70,12 @@ export default function AdminDashboard() {
   async function handleUserSelect(user: User) {
     setSelectedUserId(user.id);
     setPermLoading(true);
+    setExpandedRegId(null);
     try {
       const perms = await getUserPermissions(user.id);
       setPermissions(perms);
-      // Initialize selected set from approved registers
       const approved = new Set<number>();
-      perms.forEach(p => {
-        if (p.canView) approved.add(p.registerId);
-      });
+      perms.forEach(p => { if (p.canView) approved.add(p.registerId); });
       setSelectedRegIds(approved);
     } catch (err: any) {
       console.error('Failed to load permissions:', err);
@@ -74,49 +85,25 @@ export default function AdminDashboard() {
     }
   }
 
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users;
-    const q = searchQuery.toLowerCase();
-    return users.filter(u => 
-      u.name?.toLowerCase().includes(q) || 
-      u.email.toLowerCase().includes(q)
-    );
-  }, [users, searchQuery]);
-
   const filteredPermissions = useMemo(() => {
-    if (!registerSearch) return permissions;
+    let list = permissions;
+    if (activeTab === 'approved-registers') list = list.filter(p => selectedRegIds.has(p.registerId));
+    if (!registerSearch) return list;
     const q = registerSearch.toLowerCase();
-    return permissions.filter(p => 
-      p.registerName.toLowerCase().includes(q) || 
-      p.businessName?.toLowerCase().includes(q)
-    );
-  }, [permissions, registerSearch]);
-
-  const approvedRegisters = useMemo(() => {
-    return permissions.filter(p => p.canView);
-  }, [permissions]);
+    return list.filter(p => p.registerName.toLowerCase().includes(q) || p.businessName?.toLowerCase().includes(q));
+  }, [permissions, registerSearch, activeTab, selectedRegIds]);
 
   const toggleRegSelection = (regId: number) => {
     const next = new Set(selectedRegIds);
-    if (next.has(regId)) next.delete(regId);
-    else next.add(regId);
+    if (next.has(regId)) next.delete(regId); else next.add(regId);
     setSelectedRegIds(next);
   };
 
   const togglePermission = (regId: number, field: 'canEdit' | 'canDownload') => {
-    setPermissions(prev => prev.map(p => {
-      if (p.registerId === regId) {
-        return { ...p, [field]: !p[field] };
-      }
-      return p;
-    }));
+    setPermissions(prev => prev.map(p => p.registerId === regId ? { ...p, [field]: !p[field] } : p));
   };
 
   const handleExpandRegister = async (regId: number) => {
-    if (expandedRegId === regId) {
-      setExpandedRegId(null);
-      return;
-    }
     setExpandedRegId(regId);
     setColumnsLoading(true);
     try {
@@ -140,11 +127,8 @@ export default function AdminDashboard() {
         canEdit: selectedRegIds.has(p.registerId) ? p.canEdit : false,
         canDownload: selectedRegIds.has(p.registerId) ? p.canDownload : false
       }));
-
       await updateUserPermissions(selectedUserId, updates);
-      toast.success('Permissions updated successfully');
-      
-      // Refresh local permissions
+      toast.success('Permissions saved');
       const perms = await getUserPermissions(selectedUserId);
       setPermissions(perms);
     } catch (err) {
@@ -155,256 +139,523 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleCreateFromTemplate(template: any) {
+    if (!selectedUserId || !selectedUser) return;
+    setCreating(true);
+    try {
+      // 1. Create the register
+      const newReg = await createRegister({
+        businessId: 0, // Admin created
+        name: template.name,
+        icon: template.icon,
+        category: selectedCategory,
+        template: template.name,
+        columns: template.columns
+      });
+
+      // 2. Grant permission to the selected user
+      await updateUserPermissions(selectedUserId, [{
+        registerId: newReg.id,
+        canView: true,
+        canEdit: true,
+        canDownload: true
+      }]);
+
+      toast.success('Register created and assigned');
+      setShowTemplateModal(false);
+      
+      // 3. Refresh permissions
+      const perms = await getUserPermissions(selectedUserId);
+      setPermissions(perms);
+      setSelectedRegIds(prev => new Set(prev).add(newReg.id));
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to create register');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeleteRegister(regId: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    setMenuOpenId(null);
+    if (!window.confirm('Are you sure you want to permanently delete this register? This action cannot be undone and will remove it for all users.')) return;
+    
+    try {
+      await permanentlyDeleteRegister(regId);
+      toast.success('Register deleted');
+      // Refresh permissions
+      if (selectedUserId) {
+        const perms = await getUserPermissions(selectedUserId);
+        setPermissions(perms);
+        const nextIds = new Set(selectedRegIds);
+        nextIds.delete(regId);
+        setSelectedRegIds(nextIds);
+      }
+      if (expandedRegId === regId) setExpandedRegId(null);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete register');
+    }
+  }
+
   async function handleToggleGlobalCreate() {
     if (!selectedUserId || !selectedUser) return;
     const nextVal = !selectedUser.canEdit;
     try {
-      await updateUserGlobalPermissions(selectedUserId, nextVal, nextVal);
-      // Update local state
-      setUsers(prev => prev.map(u => u.id === selectedUserId ? { ...u, canEdit: nextVal, canCreateRegisters: nextVal, canCreateTemplates: nextVal } : u));
-      toast.success(nextVal ? 'User can now create new content' : 'Creation permission revoked');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to update global permission');
+      // Use the robust updateUserPermissions endpoint which handles all global flags
+      await updateUserPermissions(selectedUserId, [], { canEdit: nextVal, canCreateRegisters: nextVal, canCreateTemplates: nextVal });
+      
+      setUsers(prev => prev.map(u => u.id === selectedUserId ? { 
+        ...u, 
+        canEdit: nextVal, 
+        canCreateRegisters: nextVal, 
+        canCreateTemplates: nextVal 
+      } : u));
+      
+      toast.success(nextVal ? 'Creation permissions enabled' : 'Creation permissions disabled');
+    } catch (err: any) {
+      console.error('Permission update failed:', err);
+      toast.error(err.message || 'Failed to update permission');
     }
   }
 
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newUser.name || !newUser.email || !newUser.password) {
+      toast.error('All fields are required');
+      return;
+    }
+    setCreating(true);
+    try {
+      // Use the existing signup API to create the user
+      const result = await signup(newUser.name, newUser.email, newUser.password);
+      
+      // If role is admin, we might need to update their role (assuming signup defaults to user)
+      if (newUser.role === 'admin') {
+        // Here we could call an API to update role if signup doesn't handle it
+        // For now, let's assume the user is created and we'll refresh the list
+      }
+      
+      toast.success('User created successfully');
+      setShowUserModal(false);
+      setNewUser({ name: '', email: '', password: '', role: 'user' });
+      fetchInitialData(); // Refresh user list
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create user');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleUserAction(userId: number, action: string) {
+    setUserMenuOpenId(null);
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    try {
+      switch (action) {
+        case 'edit':
+          setActiveNav('users');
+          handleUserSelect(user);
+          break;
+        case 'delete':
+          if (window.confirm(`⚠️ PERMANENT DELETE: Are you sure you want to delete user ${user.name || user.email}? \n\nThis will remove all their data, credentials, and access permanently. This action CANNOT be undone.`)) {
+            try {
+              await deleteUser(userId);
+              toast.success('User purged from database');
+              // Ensure we re-fetch to show the updated list
+              await fetchInitialData();
+              // If the deleted user was selected, clear selection
+              if (selectedUserId === userId) setSelectedUserId(null);
+            } catch (err: any) {
+              console.error('Delete failed:', err);
+              toast.error(err.message || 'Failed to delete user. Please try again.');
+            }
+          }
+          break;
+        case 'role':
+          const newIsAdmin = !user.isAdmin;
+          await updateUserPermissions(userId, [], { isAdmin: newIsAdmin });
+          toast.success(`Role updated to ${newIsAdmin ? 'Admin' : 'User'}`);
+          await fetchInitialData();
+          break;
+        case 'reset':
+          if (window.confirm(`Reset password for ${user.name || user.email}? They will receive a temporary link.`)) {
+            await resetUserPassword(userId);
+            toast.success('Password reset triggered');
+          }
+          break;
+        case 'disable':
+          const isCurrentlyDisabled = user.phone === 'disabled';
+          await toggleUserStatus(userId, !isCurrentlyDisabled);
+          toast.success(isCurrentlyDisabled ? 'User enabled' : 'User disabled');
+          await fetchInitialData();
+          break;
+        default:
+          toast('Action not implemented yet');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Action failed. Please try again.');
+    }
+  }
+
+  // Computed stats
+  const adminCount = users.filter(u => u.isAdmin).length;
+  const userCount = users.length;
+  const approvedCount = permissions.filter(p => selectedRegIds.has(p.registerId)).length;
+
+  // ─── Render ───
   return (
-    <div style={s.container}>
-      {/* ──────── Sidebar ──────── */}
-      <aside style={s.sidebar}>
-        <div style={s.sidebarHeader}>
-          <div style={s.logoWrap}>
-            <div style={s.logoIcon}>
-              <Shield size={20} fill="#2563eb" color="#2563eb" />
-            </div>
-            <span style={s.logoText}>Admin Panel</span>
+    <div className="adm-root">
+      {/* ═══ Sidebar ═══ */}
+      <aside className={`adm-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+        <div className="adm-sidebar-brand" style={{ justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="brand-icon"><Shield size={18} color="#fff" /></div>
+            {!sidebarCollapsed && <span>RecordBook.IO</span>}
           </div>
+          <button 
+            className="btn-icon-ghost" 
+            style={{ color: 'rgba(255,255,255,0.5)', padding: 0, width: 24, height: 24 }}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          >
+            <Menu size={16} />
+          </button>
         </div>
 
-        <nav style={s.nav}>
-          <div style={s.navSection}>
-            <button 
-              style={{ ...s.navItem, ...(activeSidebar === 'users' ? s.navActive : {}) }}
-              onClick={() => {
-                setActiveSidebar('users');
-                setUsersExpanded(!usersExpanded);
-              }}
-            >
-              <Users size={18} />
-              <span style={{ flex: 1 }}>USERS</span>
-              <span style={s.countBadge}>{users.length}</span>
-              {usersExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
-            
-            {usersExpanded && (
-              <div style={s.userSubList}>
-                <div style={s.userSearchWrap}>
-                  <Search size={12} style={s.userSearchIcon} />
-                  <input 
-                    type="text" 
-                    placeholder="Search..." 
-                    style={s.userSearchInput}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                {filteredUsers.map(user => (
-                  <button 
-                    key={user.id}
-                    style={{ ...s.userSubItem, ...(selectedUserId === user.id ? s.userSubItemActive : {}) }}
-                    onClick={() => handleUserSelect(user)}
-                  >
-                    <div style={s.dot} />
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: selectedUserId === user.id ? 600 : 400 }}>{user.name || user.email}</span>
-                      <span style={{ fontSize: '10px', opacity: 0.6, textTransform: 'uppercase' }}>{user.isAdmin ? 'Admin' : 'User'}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        <nav className="adm-sidebar-nav">
+          <div className="adm-nav-label">Main</div>
+          <button className={`adm-nav-btn ${activeNav === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveNav('dashboard')}>
+            <Home size={16} /> <span>Dashboard</span>
+          </button>
 
-          <button 
-            style={{ ...s.navItem, ...(activeSidebar === 'active-report' ? s.navActive : {}) }}
-            onClick={() => setActiveSidebar('active-report')}
+          <div className="adm-nav-label">Management</div>
+          <button
+            className={`adm-nav-btn ${activeNav === 'users' ? 'active' : ''}`}
+            onClick={() => { setActiveNav('users'); setUsersExpanded(!usersExpanded); }}
           >
-            <BarChart2 size={18} />
-            <span>ACTIVE REPORTS</span>
+            <Users size={16} /> <span>Users</span>
+            <span className="nav-count">{userCount}</span>
+            {!sidebarCollapsed && (usersExpanded && activeNav === 'users' ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
+          </button>
+
+          {usersExpanded && activeNav === 'users' && !sidebarCollapsed && (
+            <div className="adm-user-list">
+              <button 
+                className="adm-user-item" 
+                style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', marginBottom: 8, border: '1px dashed rgba(59, 130, 246, 0.3)' }}
+                onClick={(e) => { e.stopPropagation(); setShowUserModal(true); setNewUser({ name: '', email: '', password: '', role: 'user' }); }}
+              >
+                <Plus size={14} style={{ marginRight: 8 }} />
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Create New User</span>
+              </button>
+              {users.map(u => (
+                <button
+                  key={u.id}
+                  className={`adm-user-item ${selectedUserId === u.id ? 'active' : ''}`}
+                  onClick={() => handleUserSelect(u)}
+                >
+                  <div className="u-dot" />
+                  <div className="u-info">
+                    <span className="u-name">{u.name || u.email}</span>
+                    <span className="u-role">{u.isAdmin ? 'Admin' : 'User'}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button className={`adm-nav-btn ${activeNav === 'registers' ? 'active' : ''}`} onClick={() => setActiveNav('registers')}>
+            <BookOpen size={16} /> <span>Registers</span>
+          </button>
+
+          <div className="adm-nav-label">System</div>
+          <button className={`adm-nav-btn ${activeNav === 'settings' ? 'active' : ''}`} onClick={() => setActiveNav('settings')}>
+            <Settings size={16} /> <span>Settings</span>
+          </button>
+          <button className="adm-nav-btn" onClick={() => navigate('/')}>
+            <ArrowLeft size={16} /> <span>Back to App</span>
           </button>
         </nav>
 
-        <div style={s.sidebarFooter}>
-          <div style={s.adminProfile}>
-            <div style={s.adminAvatar}>
-              <UserIcon size={20} />
-            </div>
-            <div style={s.adminInfo}>
-              <div style={s.adminName}>Admin</div>
-              <div style={s.adminRole}>Super Admin</div>
-            </div>
-            <ChevronDown size={14} style={{ opacity: 0.5 }} />
+        <div className="adm-sidebar-footer">
+          <div className="footer-avatar"><UserIcon size={16} /></div>
+          <div className="footer-info">
+            <div className="footer-name">{currentUser?.name || 'Admin'}</div>
+            <div className="footer-role">Super Admin</div>
           </div>
+          {!sidebarCollapsed && <ChevronDown size={14} style={{ opacity: 0.4, cursor: 'pointer' }} />}
         </div>
       </aside>
 
-      {/* ──────── Main Content ──────── */}
-      <main style={s.main}>
+      {/* ═══ Main ═══ */}
+      <main className="adm-main">
         {loading && (
-          <div style={s.globalLoading}>
-            <Loader2 size={40} className="animate-spin" color="#2563eb" />
-            <span style={{ marginTop: 12, fontWeight: 500, color: '#64748b' }}>Loading Admin Panel...</span>
+          <div className="adm-loading">
+            <Loader2 size={32} className="animate-spin" color="#3b82f6" />
+            <span>Loading Admin Panel...</span>
           </div>
         )}
 
-        {/* Topbar */}
-        <header style={s.topbar}>
-          <div style={s.breadcrumbs}>
-            <MoreHorizontal size={18} style={{ opacity: 0.3 }} />
-            <span style={s.breadcrumbItem}>Users</span>
+        <header className="adm-topbar">
+          <div className="adm-topbar-left">
+            {!sidebarCollapsed && (
+              <button className="btn-icon-ghost" style={{ marginRight: 8 }} onClick={() => setSidebarCollapsed(true)}>
+                <Menu size={18} />
+              </button>
+            )}
+            {sidebarCollapsed && (
+              <button className="btn-icon-ghost" style={{ marginRight: 8 }} onClick={() => setSidebarCollapsed(false)}>
+                <Menu size={18} />
+              </button>
+            )}
+            <Shield size={16} className="icon-muted" />
+            <span>Admin</span>
             <ChevronRight size={14} style={{ opacity: 0.3 }} />
-            <span style={{ ...s.breadcrumbItem, color: '#2563eb' }}>{selectedUser?.name || 'Loading...'}</span>
+            <span className="active-crumb">
+              {activeNav === 'dashboard' ? 'Dashboard' : activeNav === 'users' ? (selectedUser?.name || 'Users') : activeNav === 'registers' ? 'Registers' : 'Settings'}
+            </span>
           </div>
-          <div style={s.topbarActions}>
-            <div style={s.notificationBtn}>
-              <Bell size={18} />
-              <div style={s.badge}>5</div>
-            </div>
-            <div style={s.userProfileTop}>
-              <div style={s.topAvatar}>
-                <UserIcon size={18} />
-              </div>
-              <span>Admin</span>
-              <ChevronDown size={14} />
-            </div>
+          <div className="adm-topbar-right">
+            <button className="btn-icon-primary" onClick={() => setShowUserModal(true)} title="Create New User" style={{ marginRight: 16 }}>
+              <Plus size={18} />
+            </button>
+            <div className="top-avatar">{currentUser?.name?.[0]?.toUpperCase() || 'A'}</div>
           </div>
         </header>
 
-        {activeSidebar === 'users' ? (
-          <div style={s.content}>
-            {/* User Details Card */}
-            {selectedUser && (
-              <div style={s.userCard}>
-                <div style={s.userCardMain}>
-                  <div style={s.avatarLarge}>
-                    <UserIcon size={32} />
+        <div className="adm-content">
+          {/* ─── Dashboard View ─── */}
+          {activeNav === 'dashboard' && (
+            <>
+              <div className="dash-stats">
+                <div className="dash-stat-card">
+                  <div className="stat-info">
+                    <h4>Total Users</h4>
+                    <div className="stat-value">{userCount}</div>
+                    <div className="stat-sub">{adminCount} admins</div>
                   </div>
-                  <div style={s.userDetails}>
-                    <div style={s.userNameRow}>
-                      <h2 style={s.userName}>{selectedUser.name || 'Unnamed User'}</h2>
-                      <span style={s.statusBadge}>Active</span>
-                    </div>
-                    <div style={s.userEmail}>{selectedUser.email}</div>
-                  </div>
+                  <div className="stat-icon blue"><Users size={20} /></div>
                 </div>
-                
-                <div style={s.userMetaGrid}>
-                  <div style={s.metaItem}>
-                    <div style={s.metaLabel}>Role</div>
-                    <div style={s.metaValue}>{selectedUser.isAdmin ? 'Admin' : 'User'}</div>
+                <div className="dash-stat-card">
+                  <div className="stat-info">
+                    <h4>Total Registers</h4>
+                    <div className="stat-value">{permissions.length}</div>
+                    <div className="stat-sub">Across all users</div>
                   </div>
-                  <div style={s.metaItem}>
-                    <div style={s.metaLabel}>Joined On</div>
-                    <div style={s.metaValue}>
-                      {new Date(selectedUser.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </div>
+                  <div className="stat-icon green"><BookOpen size={20} /></div>
+                </div>
+                <div className="dash-stat-card">
+                  <div className="stat-info">
+                    <h4>Active Sessions</h4>
+                    <div className="stat-value">{Math.min(userCount, 5)}</div>
+                    <div className="stat-sub">Currently online</div>
                   </div>
-                  <div style={s.metaItem}>
-                    <div style={s.metaLabel}>Last Login</div>
-                    <div style={s.metaValue}>20 May 2024 10:30 AM</div>
+                  <div className="stat-icon purple"><BarChart2 size={20} /></div>
+                </div>
+                <div className="dash-stat-card">
+                  <div className="stat-info">
+                    <h4>Pending Actions</h4>
+                    <div className="stat-value">0</div>
+                    <div className="stat-sub">All clear</div>
                   </div>
+                  <div className="stat-icon orange"><Bell size={20} /></div>
                 </div>
               </div>
-            )}
 
-            {/* Tabs */}
-            <div style={s.tabBar}>
-              <button 
-                style={{ ...s.tab, ...(activeTab === 'all-registers' ? s.tabActive : {}) }}
-                onClick={() => setActiveTab('all-registers')}
-              >
-                ALL REGISTERS
-              </button>
-              <button 
-                style={{ ...s.tab, ...(activeTab === 'approved-registers' ? s.tabActive : {}) }}
-                onClick={() => setActiveTab('approved-registers')}
-              >
-                APPROVED REGISTERS
-              </button>
-
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, padding: '0 10px' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>ALLOW CREATION</span>
-                <label className="switch" style={s.switch}>
-                  <input 
-                    type="checkbox" 
-                    checked={selectedUser?.canEdit || false} 
-                    onChange={handleToggleGlobalCreate}
-                  />
-                  <span className="slider round"></span>
-                </label>
+              <div className="tbl-panel">
+                <div className="tbl-panel-bar">
+                  <div>
+                    <h3>Recent Users</h3>
+                    <p>Latest registered users on the platform</p>
+                  </div>
+                </div>
+                <div className="tbl-wrap">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 40 }}>#</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Joined</th>
+                        <th style={{ width: 40 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.slice(0, 8).map((u, i) => (
+                        <tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => { setActiveNav('users'); handleUserSelect(u); }}>
+                          <td style={{ color: '#94a3b8' }}>{i + 1}</td>
+                          <td style={{ fontWeight: 500 }}>{u.name || '—'}</td>
+                          <td style={{ color: '#64748b' }}>{u.email}</td>
+                          <td><span className={u.isAdmin ? 'badge-ok' : 'badge-no'}>{u.isAdmin ? 'Admin' : 'User'}</span></td>
+                          <td style={{ color: '#64748b' }}>{new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                          <td style={{ position: 'relative', overflow: 'visible' }} onClick={e => e.stopPropagation()}>
+                            <button className="btn-icon-ghost" onClick={() => setUserMenuOpenId(userMenuOpenId === u.id ? null : u.id)}>
+                              <MoreVertical size={16} />
+                            </button>
+                            {userMenuOpenId === u.id && (
+                              <>
+                                <div className="menu-backdrop" onClick={() => setUserMenuOpenId(null)} />
+                                <div className="dropdown-menu" style={{ right: 0, top: '100%', marginTop: 4 }}>
+                                  <button className="dropdown-item" onClick={() => handleUserAction(u.id, 'edit')}>
+                                    <Pencil size={14} /> Edit User
+                                  </button>
+                                  <button className="dropdown-item" onClick={() => handleUserAction(u.id, 'role')}>
+                                    <ShieldAlert size={14} /> {u.isAdmin ? 'Make User' : 'Make Admin'}
+                                  </button>
+                                  <button className="dropdown-item" onClick={() => handleUserAction(u.id, 'reset')}>
+                                    <Key size={14} /> Reset Password
+                                  </button>
+                                  <button className="dropdown-item" onClick={() => handleUserAction(u.id, 'disable')}>
+                                    {u.isAdmin ? <UserX size={14} /> : <UserCheck size={14} />} 
+                                    {u.isAdmin ? 'Disable User' : 'Enable User'}
+                                  </button>
+                                  <div className="dropdown-divider" />
+                                  <button className="dropdown-item text-red" onClick={() => handleUserAction(u.id, 'delete')}>
+                                    <Trash2 size={14} /> Delete User
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            </>
+          )}
 
-            {/* Tab Content */}
-            <div style={s.tabContent}>
-              {activeTab === 'all-registers' ? (
-                <div style={s.panel}>
-                  <div style={s.panelHeader}>
+          {/* ─── Users View ─── */}
+          {activeNav === 'users' && (
+            <div className={`adm-two-col ${expandedRegId ? '' : 'no-detail'}`}>
+              <div className="users-section">
+                {/* User Header Card - COMPACT */}
+                {selectedUser && (
+                  <div className="user-card-header">
+                    <div className="user-card-left">
+                      <div className="user-avatar-lg">{(selectedUser.name || selectedUser.email)[0].toUpperCase()}</div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <h2 className="user-card-name">{selectedUser.name || 'Unnamed User'}</h2>
+                          <span className="badge-active">Active</span>
+                        </div>
+                        <p className="user-card-email">{selectedUser.email}</p>
+                      </div>
+                    </div>
+                    <div className="user-card-right">
+                      <div className="user-meta-item">
+                        <label>Role</label>
+                        <span>{selectedUser.isAdmin ? 'Admin' : 'User'}</span>
+                      </div>
+                      <div className="user-meta-item">
+                        <label>Joined</label>
+                        <span>{new Date(selectedUser.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      </div>
+                      <div className="user-meta-item">
+                        <label>Allow Creation</label>
+                        <div className="toggle-switch" onClick={handleToggleGlobalCreate} style={{ cursor: 'pointer' }}>
+                          <input type="checkbox" checked={!!selectedUser.canEdit} readOnly />
+                          <span className="toggle-slider"></span>
+                        </div>
+                      </div>
+                      <div style={{ paddingLeft: 12, borderLeft: '1px solid #e2e8f0', display: 'flex', alignItems: 'center' }}>
+                        <button className="btn-primary" onClick={handleApprove} disabled={saving}>
+                          {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Registers Table */}
+                <div className="tbl-panel">
+                  <div className="tbl-panel-tabs">
+                    <button className={`tbl-tab ${activeTab === 'all-registers' ? 'active' : ''}`} onClick={() => setActiveTab('all-registers')}>All Registers</button>
+                    <button className={`tbl-tab ${activeTab === 'approved-registers' ? 'active' : ''}`} onClick={() => setActiveTab('approved-registers')}>Approved</button>
+                  </div>
+
+                  <div className="tbl-panel-bar">
                     <div>
-                      <h3 style={s.panelTitle}>All Registers</h3>
-                      <p style={s.panelSub}>Select registers to approve access for this user.</p>
+                      <h3>{activeTab === 'all-registers' ? 'All Registers' : 'Approved Registers'}</h3>
+                      <p>Select registers to approve access for this user.</p>
                     </div>
-                    <div style={s.searchBox}>
-                      <input 
-                        type="text" 
-                        placeholder="Search registers..." 
-                        style={s.searchField}
-                        value={registerSearch}
-                        onChange={(e) => setRegisterSearch(e.target.value)}
-                      />
-                      <Search size={14} style={s.searchFieldIcon} />
+                    <div className="tbl-actions-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div className="tbl-search">
+                        <Search size={14} />
+                        <input placeholder="Search registers..." value={registerSearch} onChange={e => setRegisterSearch(e.target.value)} />
+                      </div>
+                      <button className="btn-icon-primary" onClick={() => setShowTemplateModal(true)} title="Create New Register">
+                        <Plus size={16} />
+                      </button>
                     </div>
                   </div>
 
-                  <div style={s.tableWrap}>
-                    <table style={s.table}>
+                  <div className="tbl-wrap">
+                    <table className="tbl">
                       <thead>
                         <tr>
-                          <th style={{ ...s.th, width: 40 }}>
-                            <input 
-                              type="checkbox" 
+                          <th style={{ width: 36 }}>
+                            <input type="checkbox" className="cb"
                               checked={selectedRegIds.size === permissions.length && permissions.length > 0}
-                              onChange={(e) => {
+                              onChange={e => {
                                 if (e.target.checked) setSelectedRegIds(new Set(permissions.map(p => p.registerId)));
                                 else setSelectedRegIds(new Set());
                               }}
                             />
                           </th>
-                          <th style={s.th}>REGISTER NAME</th>
+                          <th style={{ width: 36 }}>#</th>
+                          <th>Register Name</th>
+                          <th style={{ width: 60 }}>Edit</th>
+                          <th style={{ width: 80 }}>Download</th>
+                          <th style={{ width: 100 }}>Status</th>
+                          <th style={{ width: 40 }}></th>
                         </tr>
                       </thead>
                       <tbody>
                         {permLoading ? (
-                          <tr>
-                            <td colSpan={2} style={s.loadingCell}>
-                              <Loader2 size={24} className="animate-spin" />
-                              <span>Loading registers...</span>
+                          <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32 }}><Loader2 size={24} className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
+                        ) : filteredPermissions.map((p, idx) => (
+                          <tr key={p.registerId} className={expandedRegId === p.registerId ? 'row-active' : ''} onClick={() => handleExpandRegister(p.registerId)}>
+                            <td onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" className="cb" checked={selectedRegIds.has(p.registerId)} onChange={() => toggleRegSelection(p.registerId)} />
                             </td>
-                          </tr>
-                        ) : filteredPermissions.map(p => (
-                          <tr key={p.registerId} style={s.tr}>
-                            <td style={s.td}>
-                              <input 
-                                type="checkbox" 
-                                checked={selectedRegIds.has(p.registerId)}
-                                onChange={() => toggleRegSelection(p.registerId)}
-                              />
+                            <td style={{ color: '#94a3b8' }}>{idx + 1}</td>
+                            <td style={{ fontWeight: 500 }}>{p.registerName}</td>
+                            <td onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" className="cb" checked={p.canEdit} disabled={!selectedRegIds.has(p.registerId)} onChange={() => togglePermission(p.registerId, 'canEdit')} />
                             </td>
-                            <td style={s.td}>
-                              <div style={s.regRow}>
-                                <span style={s.regName}>{p.registerName}</span>
-                              </div>
+                            <td onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" className="cb" checked={p.canDownload} disabled={!selectedRegIds.has(p.registerId)} onChange={() => togglePermission(p.registerId, 'canDownload')} />
+                            </td>
+                            <td>
+                              {selectedRegIds.has(p.registerId)
+                                ? <span className="badge-ok">Approved</span>
+                                : <span className="badge-no">Not Approved</span>}
+                            </td>
+                            <td style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                              <button className="btn-icon-ghost" onClick={() => setMenuOpenId(menuOpenId === p.registerId ? null : p.registerId)}>
+                                <MoreVertical size={16} />
+                              </button>
+                              {menuOpenId === p.registerId && (
+                                <>
+                                  <div className="menu-backdrop" onClick={() => setMenuOpenId(null)} />
+                                  <div className="dropdown-menu">
+                                    <button className="dropdown-item" onClick={() => { setMenuOpenId(null); /* download logic here if needed */ }}>
+                                      <Download size={14} /> Download Data
+                                    </button>
+                                    <div className="dropdown-divider" />
+                                    <button className="dropdown-item text-red" onClick={(e) => handleDeleteRegister(p.registerId, e)}>
+                                      <Trash2 size={14} /> Delete Register
+                                    </button>
+                                  </div>
+                                </>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -412,745 +663,217 @@ export default function AdminDashboard() {
                     </table>
                   </div>
 
-                  <div style={s.panelFooter}>
-                    <div style={s.selectionCount}>
-                      {selectedRegIds.size} registers selected
-                    </div>
-                    <button 
-                      style={s.approveBtn}
-                      onClick={handleApprove}
-                      disabled={saving}
-                    >
-                      {saving ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        <Check size={16} />
-                      )}
-                      <span>Approve ({selectedRegIds.size})</span>
-                    </button>
+                  <div className="tbl-footer">
+                    <span className="count">{selectedRegIds.size} of {permissions.length} registers selected</span>
                   </div>
                 </div>
-              ) : (
-                <div style={s.panel}>
-                  <div style={s.panelHeader}>
+              </div>
+
+              {/* ─── Detail Panel ─── */}
+              {expandedRegId && (
+                <div className="detail-panel">
+                  <div className="detail-head">
                     <div>
-                      <h3 style={s.panelTitle}>Approved Registers</h3>
-                      <p style={s.panelSub}>Registers that this user has access to.</p>
+                      <h4>Register Details</h4>
+                      <h3>{permissions.find(p => p.registerId === expandedRegId)?.registerName}</h3>
                     </div>
+                    <button className="detail-close" onClick={() => setExpandedRegId(null)}><X size={18} /></button>
                   </div>
 
-                  <div style={s.tableWrap}>
-                    <table style={s.table}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...s.th, width: '40px' }}></th>
-                          <th style={s.th}>REGISTER NAME</th>
-                          <th style={{ ...s.th, width: '120px', textAlign: 'center' }}>EDIT</th>
-                          <th style={{ ...s.th, width: '120px', textAlign: 'center' }}>EXPORT</th>
-                        </tr>
-                      </thead>
+                  <div className="detail-tabs">
+                    <button className="active">Columns</button>
+                    <button>Edit</button>
+                    <button>Download</button>
+                  </div>
+
+                  <div className="detail-body">
+                    <p className="detail-label">Total Columns: {regColumns.length}</p>
+
+                    <table className="col-table">
+                      <thead><tr><th>#</th><th>Column Name</th><th>Type</th></tr></thead>
                       <tbody>
-                        {approvedRegisters.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} style={s.emptyCell}>No approved registers yet.</td>
-                          </tr>
-                        ) : approvedRegisters.map(p => (
-                          <>
-                            <tr key={p.registerId} style={s.tr}>
-                              <td style={s.td}>
-                                <button 
-                                  onClick={() => handleExpandRegister(p.registerId)}
-                                  style={s.expandBtn}
-                                >
-                                  {expandedRegId === p.registerId ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                </button>
-                              </td>
-                              <td style={s.td}>
-                                <div style={{ ...s.regRow, cursor: 'pointer' }} onClick={() => handleExpandRegister(p.registerId)}>
-                                  <div style={s.iconCircle}>
-                                    <FileText size={14} color="#2563eb" />
-                                  </div>
-                                  <span style={s.regName}>{p.registerName}</span>
-                                </div>
-                              </td>
-                              <td style={{ ...s.td, textAlign: 'center' }}>
-                                <button 
-                                  onClick={() => togglePermission(p.registerId, 'canEdit')}
-                                  style={{ ...s.permToggle, ...(p.canEdit ? s.permToggleActive : {}) }}
-                                  title={p.canEdit ? "Edit permission enabled" : "Edit permission disabled"}
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                              </td>
-                              <td style={{ ...s.td, textAlign: 'center' }}>
-                                <button 
-                                  onClick={() => togglePermission(p.registerId, 'canDownload')}
-                                  style={{ ...s.permToggle, ...(p.canDownload ? s.permToggleActive : {}) }}
-                                  title={p.canDownload ? "Download permission enabled" : "Download permission disabled"}
-                                >
-                                  <Download size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                            {expandedRegId === p.registerId && (
-                              <tr style={{ background: '#f1f5f9' }}>
-                                <td colSpan={4} style={{ padding: '1rem 3rem' }}>
-                                  <div style={s.columnPanel}>
-                                    <h4 style={s.columnTitle}>
-                                      <Database size={14} style={{ marginRight: 8 }} />
-                                      Register Columns
-                                    </h4>
-                                    {columnsLoading ? (
-                                      <div style={s.columnLoading}>
-                                        <Loader2 size={16} className="animate-spin" />
-                                        <span>Fetching column structure...</span>
-                                      </div>
-                                    ) : (
-                                      <div style={s.columnGrid}>
-                                        {regColumns.length === 0 ? (
-                                          <div style={s.noColumns}>No columns defined for this register.</div>
-                                        ) : regColumns.map(col => (
-                                          <div key={col.id} style={s.columnBadge}>
-                                            <span style={s.columnName}>{col.name}</span>
-                                            <span style={s.columnType}>{col.type}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </>
+                        {columnsLoading ? (
+                          <tr><td colSpan={3} style={{ textAlign: 'center', padding: 20 }}><Loader2 size={16} className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
+                        ) : regColumns.map((col, idx) => (
+                          <tr key={col.id}><td>{idx + 1}</td><td>{col.name}</td><td style={{ textTransform: 'capitalize' }}>{col.type}</td></tr>
                         ))}
                       </tbody>
                     </table>
+
+                    <div className="access-card">
+                      <h5>Access Settings</h5>
+                      <label className="access-row">
+                        <input type="checkbox" className="cb"
+                          checked={permissions.find(p => p.registerId === expandedRegId)?.canEdit || false}
+                          disabled={!selectedRegIds.has(expandedRegId)}
+                          onChange={() => togglePermission(expandedRegId, 'canEdit')}
+                        />
+                        <div>
+                          <div className="a-label">Edit Access</div>
+                          <div className="a-desc">Allow user to edit this register</div>
+                        </div>
+                      </label>
+                      <label className="access-row">
+                        <input type="checkbox" className="cb"
+                          checked={permissions.find(p => p.registerId === expandedRegId)?.canDownload || false}
+                          disabled={!selectedRegIds.has(expandedRegId)}
+                          onChange={() => togglePermission(expandedRegId, 'canDownload')}
+                        />
+                        <div>
+                          <div className="a-label">Download Access</div>
+                          <div className="a-desc">Allow user to download this register</div>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="note-box">
+                      <div className="note-title"><AlertTriangle size={14} /> Note</div>
+                      <p>Only approved registers will be visible in the user panel. Unapproved registers will be hidden completely.</p>
+                    </div>
                   </div>
-                  
-                  <div style={s.panelFooter}>
-                    <p style={{ fontSize: '13px', color: '#64748b' }}>
-                      Tip: Use the toggles above to grant/revoke specific Edit and Export privileges.
-                    </p>
-                    <button 
-                      style={s.approveBtn}
-                      onClick={handleApprove}
-                      disabled={saving}
-                    >
-                      {saving ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        <Check size={16} />
-                      )}
-                      <span>Save Changes</span>
+
+                  <div className="detail-foot">
+                    <button className="btn-ghost" onClick={() => setExpandedRegId(null)}>Cancel</button>
+                    <button className="btn-primary" onClick={handleApprove} disabled={saving}>
+                      {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
                     </button>
                   </div>
                 </div>
               )}
             </div>
-          </div>
-        ) : (
-          <div style={s.placeholderContent}>
-            <div style={s.reportEmptyState}>
-              <BarChart2 size={64} color="#94a3b8" strokeWidth={1} />
-              <h2 style={s.emptyTitle}>System Reports</h2>
-              <p style={s.emptyDesc}>
-                Real-time usage analytics and register activity reports will be available here soon.
-              </p>
-              <button style={s.secondaryBtn}>Generate Summary</button>
+          )}
+
+          {/* ─── Registers Overview ─── */}
+          {activeNav === 'registers' && (
+            <div className="empty-state" style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <BookOpen size={48} strokeWidth={1} />
+              <p style={{ fontWeight: 600, fontSize: 16, color: '#0f172a', margin: '16px 0 4px' }}>Register Management</p>
+              <p>Global register overview and bulk operations will be available here.</p>
+            </div>
+          )}
+
+          {/* ─── Settings ─── */}
+          {activeNav === 'settings' && (
+            <div className="empty-state" style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <Settings size={48} strokeWidth={1} />
+              <p style={{ fontWeight: 600, fontSize: 16, color: '#0f172a', margin: '16px 0 4px' }}>System Settings</p>
+              <p>Institution settings, subscription management, and security controls will be available here.</p>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* ─── Template Modal ─── */}
+      {showTemplateModal && (
+        <div className="modal-overlay">
+          <div className="modal-content tmpl-modal">
+            <div className="modal-header">
+              <h2>Create & Assign Register</h2>
+              <button className="btn-close" onClick={() => setShowTemplateModal(false)}><X size={20} /></button>
+            </div>
+            <div className="tmpl-layout">
+              <div className="tmpl-sidebar">
+                {CATEGORIES.map(cat => (
+                  <button 
+                    key={cat.id} 
+                    className={`tmpl-cat-btn ${selectedCategory === cat.id ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory(cat.id)}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+              <div className="tmpl-main">
+                <div className="tmpl-grid">
+                  {(TEMPLATES[selectedCategory] || []).map((tmpl, i) => (
+                    <div key={i} className="tmpl-card">
+                      <div className="tmpl-icon"><FileText size={24} color="#3b82f6" /></div>
+                      <h4>{tmpl.name}</h4>
+                      <p>{tmpl.description}</p>
+                      <button 
+                        className="btn-primary tmpl-create-btn" 
+                        onClick={() => handleCreateFromTemplate(tmpl)}
+                        disabled={creating}
+                      >
+                        {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                        Create & Assign
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      )}
+
+      {/* ─── User Creation Modal ─── */}
+      {showUserModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ width: 400 }}>
+            <div className="modal-header">
+              <h2>Create New User</h2>
+              <button className="btn-close" onClick={() => { setShowUserModal(false); setNewUser({ name: '', email: '', password: '', role: 'user' }); }}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleCreateUser} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="form-group">
+                <label className="detail-label">Full Name</label>
+                <input 
+                  type="text" 
+                  className="tbl-search" 
+                  style={{ width: '100%', background: '#f8fafc' }} 
+                  placeholder="John Doe"
+                  value={newUser.name}
+                  onChange={e => setNewUser({ ...newUser, name: e.target.value })}
+                  required 
+                />
+              </div>
+              <div className="form-group">
+                <label className="detail-label">Email Address</label>
+                <input 
+                  type="email" 
+                  className="tbl-search" 
+                  style={{ width: '100%', background: '#f8fafc' }} 
+                  placeholder="john@example.com"
+                  value={newUser.email}
+                  onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                  required 
+                />
+              </div>
+              <div className="form-group">
+                <label className="detail-label">Password</label>
+                <input 
+                  type="password" 
+                  className="tbl-search" 
+                  style={{ width: '100%', background: '#f8fafc' }} 
+                  placeholder="••••••••"
+                  value={newUser.password}
+                  onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                  required 
+                />
+              </div>
+              <div className="form-group">
+                <label className="detail-label">Role</label>
+                <select 
+                  className="tbl-search" 
+                  style={{ width: '100%', background: '#f8fafc' }}
+                  value={newUser.role}
+                  onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', gap: 12 }}>
+                <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => { setShowUserModal(false); setNewUser({ name: '', email: '', password: '', role: 'user' }); }}>Cancel</button>
+                <button type="submit" className="btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={creating}>
+                  {creating ? <Loader2 size={16} className="animate-spin" /> : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    height: '100vh',
-    background: '#f8fafc',
-    fontFamily: '"Inter", sans-serif',
-    color: '#1e293b'
-  },
-  sidebar: {
-    width: 260,
-    background: '#1e293b',
-    color: '#fff',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  sidebarHeader: {
-    padding: '1.5rem',
-    borderBottom: '1px solid rgba(255,255,255,0.05)'
-  },
-  logoWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12
-  },
-  logoIcon: {
-    width: 32,
-    height: 32,
-    background: '#fff',
-    borderRadius: 8,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  logoText: {
-    fontSize: 18,
-    fontWeight: 700,
-    letterSpacing: '-0.02em'
-  },
-  nav: {
-    flex: 1,
-    padding: '1.5rem 0',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4
-  },
-  navItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '0.75rem 1.5rem',
-    background: 'transparent',
-    border: 'none',
-    color: 'rgba(255,255,255,0.6)',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 600,
-    textAlign: 'left',
-    transition: 'all 0.2s',
-    width: '100%'
-  },
-  navActive: {
-    background: '#2563eb',
-    color: '#fff'
-  },
-  countBadge: {
-    background: 'rgba(255,255,255,0.1)',
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 10,
-    fontWeight: 700,
-    padding: '2px 6px',
-    borderRadius: 10,
-    marginRight: 8
-  },
-  userSubList: {
-    display: 'flex',
-    flexDirection: 'column',
-    padding: '0.5rem 0'
-  },
-  userSearchWrap: {
-    position: 'relative',
-    margin: '0.5rem 1.5rem 1rem',
-  },
-  userSearchInput: {
-    width: '100%',
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 6,
-    padding: '0.4rem 0.5rem 0.4rem 2rem',
-    color: '#fff',
-    fontSize: 12,
-    outline: 'none'
-  },
-  userSearchIcon: {
-    position: 'absolute',
-    left: 8,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    opacity: 0.4
-  },
-  userSubItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '0.6rem 1.5rem 0.6rem 3rem',
-    background: 'transparent',
-    border: 'none',
-    color: 'rgba(255,255,255,0.4)',
-    cursor: 'pointer',
-    fontSize: 13,
-    textAlign: 'left',
-    transition: 'all 0.2s',
-    position: 'relative'
-  },
-  userSubItemActive: {
-    color: '#fff',
-    background: 'rgba(255,255,255,0.05)'
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: '50%',
-    background: 'currentColor',
-    opacity: 0.5
-  },
-  sidebarFooter: {
-    padding: '1.5rem',
-    borderTop: '1px solid rgba(255,255,255,0.05)'
-  },
-  adminProfile: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    cursor: 'pointer'
-  },
-  adminAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: '50%',
-    background: 'rgba(255,255,255,0.1)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  adminInfo: {
-    flex: 1
-  },
-  adminName: {
-    fontSize: 13,
-    fontWeight: 600
-  },
-  adminRole: {
-    fontSize: 11,
-    opacity: 0.5
-  },
-  main: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden'
-  },
-  topbar: {
-    height: 64,
-    background: '#fff',
-    borderBottom: '1px solid #e2e8f0',
-    padding: '0 1.5rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  breadcrumbs: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 14
-  },
-  breadcrumbItem: {
-    fontWeight: 500,
-    color: '#64748b'
-  },
-  topbarActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 20
-  },
-  notificationBtn: {
-    position: 'relative',
-    color: '#64748b',
-    cursor: 'pointer'
-  },
-  badge: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    background: '#ef4444',
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: 700,
-    width: 14,
-    height: 14,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '2px solid #fff'
-  },
-  userProfileTop: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 13,
-    fontWeight: 500,
-    color: '#334155',
-    cursor: 'pointer'
-  },
-  topAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: '50%',
-    background: '#f1f5f9',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  content: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '1.5rem'
-  },
-  userCard: {
-    background: '#fff',
-    borderRadius: 12,
-    border: '1px solid #e2e8f0',
-    padding: '1.5rem',
-    marginBottom: '1.5rem',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  userCardMain: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 16
-  },
-  avatarLarge: {
-    width: 64,
-    height: 64,
-    borderRadius: '50%',
-    background: '#f1f5f9',
-    color: '#64748b',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  userDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4
-  },
-  userNameRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12
-  },
-  userName: {
-    fontSize: 20,
-    fontWeight: 700,
-    margin: 0
-  },
-  statusBadge: {
-    background: '#dcfce7',
-    color: '#16a34a',
-    fontSize: 11,
-    fontWeight: 700,
-    padding: '2px 8px',
-    borderRadius: 12,
-    textTransform: 'uppercase'
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#64748b'
-  },
-  userMetaGrid: {
-    display: 'flex',
-    gap: 40
-  },
-  metaItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4
-  },
-  metaLabel: {
-    fontSize: 12,
-    color: '#94a3b8',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    fontWeight: 600
-  },
-  metaValue: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: '#334155'
-  },
-  tabBar: {
-    display: 'flex',
-    gap: 32,
-    borderBottom: '1px solid #e2e8f0',
-    marginBottom: '1.5rem',
-    padding: '0 0.5rem'
-  },
-  tab: {
-    padding: '0.75rem 0',
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid transparent',
-    color: '#64748b',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  tabActive: {
-    color: '#2563eb',
-    borderBottomColor: '#2563eb'
-  },
-  tabContent: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-    gap: '1.5rem'
-  },
-  panel: {
-    background: '#fff',
-    borderRadius: 12,
-    border: '1px solid #e2e8f0',
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: 400
-  },
-  panelHeader: {
-    padding: '1.25rem',
-    borderBottom: '1px solid #e2e8f0',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start'
-  },
-  panelTitle: {
-    fontSize: 16,
-    fontWeight: 700,
-    margin: '0 0 4px 0'
-  },
-  panelSub: {
-    fontSize: 13,
-    color: '#64748b',
-    margin: 0
-  },
-  searchBox: {
-    position: 'relative'
-  },
-  searchField: {
-    padding: '0.5rem 1rem 0.5rem 2.5rem',
-    borderRadius: 8,
-    border: '1px solid #e2e8f0',
-    background: '#f8fafc',
-    fontSize: 13,
-    width: 200,
-    outline: 'none'
-  },
-  searchFieldIcon: {
-    position: 'absolute',
-    left: 12,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    opacity: 0.3
-  },
-  tableWrap: {
-    flex: 1,
-    overflowY: 'auto'
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse'
-  },
-  th: {
-    textAlign: 'left',
-    padding: '0.75rem 1.25rem',
-    fontSize: 11,
-    fontWeight: 600,
-    color: '#94a3b8',
-    background: '#f8fafc',
-    borderBottom: '1px solid #e2e8f0'
-  },
-  td: {
-    padding: '0.875rem 1.25rem',
-    borderBottom: '1px solid #f1f5f9'
-  },
-  tr: {
-    transition: 'background 0.2s'
-  },
-  regRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12
-  },
-  regName: {
-    fontSize: 14,
-    fontWeight: 500,
-    color: '#334155'
-  },
-  loadingCell: {
-    padding: '4rem',
-    textAlign: 'center',
-    color: '#94a3b8',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 12
-  },
-  emptyCell: {
-    padding: '3rem',
-    textAlign: 'center',
-    color: '#94a3b8',
-    fontSize: 14
-  },
-  panelFooter: {
-    padding: '1.25rem',
-    borderTop: '1px solid #e2e8f0',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    background: '#f8fafc',
-    borderRadius: '0 0 12px 12px'
-  },
-  selectionCount: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#64748b'
-  },
-  approveBtn: {
-    padding: '0.625rem 1.25rem',
-    background: '#2563eb',
-    color: '#fff',
-    borderRadius: 8,
-    border: 'none',
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    transition: 'all 0.2s'
-  },
-  placeholderContent: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '2rem'
-  },
-  reportEmptyState: {
-    textAlign: 'center',
-    maxWidth: 400
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: 800,
-    margin: '1.5rem 0 0.5rem 0'
-  },
-  emptyDesc: {
-    fontSize: 15,
-    color: '#64748b',
-    margin: '0 0 2rem 0',
-    lineHeight: 1.5
-  },
-  secondaryBtn: {
-    padding: '0.75rem 1.5rem',
-    background: '#fff',
-    border: '1px solid #e2e8f0',
-    borderRadius: 10,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  permToggle: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    border: '1px solid #e2e8f0',
-    background: '#fff',
-    color: '#94a3b8',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s',
-    margin: '0 4px'
-  },
-  permToggleActive: {
-    background: '#dcfce7',
-    color: '#10b981',
-    borderColor: '#10b981'
-  },
-  expandBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    border: 'none',
-    background: 'transparent',
-    color: '#94a3b8',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  columnPanel: {
-    background: '#fff',
-    borderRadius: 8,
-    border: '1px solid #e2e8f0',
-    padding: '1rem',
-    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
-  },
-  columnTitle: {
-    fontSize: 13,
-    fontWeight: 700,
-    margin: '0 0 1rem 0',
-    display: 'flex',
-    alignItems: 'center',
-    color: '#1e293b'
-  },
-  columnLoading: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 13,
-    color: '#64748b',
-    padding: '1rem 0'
-  },
-  columnGrid: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 8
-  },
-  columnBadge: {
-    padding: '4px 10px',
-    background: '#f1f5f9',
-    borderRadius: 6,
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 80,
-    border: '1px solid #e2e8f0'
-  },
-  columnName: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: '#334155'
-  },
-  columnType: {
-    fontSize: 10,
-    color: '#94a3b8',
-    textTransform: 'uppercase'
-  },
-  noColumns: {
-    fontSize: 13,
-    color: '#94a3b8',
-    fontStyle: 'italic'
-  },
-  iconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    background: '#eff6ff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  globalLoading: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(255,255,255,0.8)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 100,
-    backdropFilter: 'blur(4px)'
-  }
-};

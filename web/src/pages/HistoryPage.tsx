@@ -1,8 +1,8 @@
-import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { listBusinesses, listHistory, type HistoryEntry } from '../lib/api';
-import { Activity, Calendar, User, FileText, ArrowLeft, Plus, Trash2, Pencil, Link as LinkIcon, Settings, RotateCcw } from 'lucide-react';
+import { Activity, ArrowLeft, Calendar, FileText, Link as LinkIcon, Pencil, Plus, RotateCcw, Settings, Trash2, User } from 'lucide-react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { listBusinesses, listHistory, type HistoryEntry } from '../lib/api';
 
 export default function HistoryPage() {
   const navigate = useNavigate();

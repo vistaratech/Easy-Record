@@ -2698,12 +2698,8 @@ export default function RegisterPage() {
   );
   if (!register) return <div className="empty-state"><p>Register not found</p></div>;
 
-  const perms = register.permissions || { canView: true, canEdit: true, canDownload: true };
-  const canEdit = perms.canEdit !== false;
-  const canDownload = perms.canDownload !== false;
-
   return (
-    <div className={`content-area ${!canEdit ? 'read-only-view' : ''}`}>
+    <div className="content-area">
       {/* ── Header ── */}
       <div className="register-header">
         <div className="register-header-left">
@@ -2750,7 +2746,6 @@ export default function RegisterPage() {
             register={register} 
             setShareModal={setShareModal} 
             handleOpenExport={() => setShowExportModal(true)}
-            canDownload={canDownload}
           />
         </div>
       </div>

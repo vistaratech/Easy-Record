@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { AlignLeft, AlignCenter, AlignRight, Type, Paintbrush, X, RotateCcw } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Type, Paintbrush, X, RotateCcw, Bell } from 'lucide-react';
 import type { CellStyle } from '../../lib/api';
 
 // Curated palette with good contrast on both light and dark backgrounds
@@ -22,11 +22,12 @@ interface CellFormatToolbarProps {
   currentStyle: CellStyle;
   onStyleChange: (style: Partial<CellStyle>) => void;
   onClearStyle: () => void;
+  onAddReminder?: () => void;
   onClose: () => void;
 }
 
 export const CellFormatToolbar = React.memo(function CellFormatToolbar({
-  position, currentStyle, onStyleChange, onClearStyle, onClose
+  position, currentStyle, onStyleChange, onClearStyle, onAddReminder, onClose
 }: CellFormatToolbarProps) {
   const [activePanel, setActivePanel] = useState<'textColor' | 'bgColor' | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -152,6 +153,29 @@ export const CellFormatToolbar = React.memo(function CellFormatToolbar({
         >
           <RotateCcw size={14} />
         </button>
+
+        {onAddReminder && (
+          <>
+            <div style={{ width: '1px', height: '20px', background: '#e5e7eb', margin: '0 2px' }} />
+            <button
+              title="Add Reminder"
+              onClick={() => {
+                onAddReminder();
+                onClose();
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '32px', height: '32px', borderRadius: '6px', border: 'none', cursor: 'pointer',
+                background: 'transparent', color: '#6b7280',
+                transition: 'background 0.15s',
+              }}
+            >
+              <Bell size={14} />
+            </button>
+          </>
+        )}
+
+        <div style={{ width: '1px', height: '20px', background: '#e5e7eb', margin: '0 2px' }} />
 
         {/* Close */}
         <button

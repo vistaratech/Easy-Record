@@ -3,11 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   listBusinesses, listBackups, createBackup, restoreBackup, deleteBackup,
+  listFolders, listRegisters, getRegister,
   type BackupMeta,
 } from '../lib/api';
+import JSZip from 'jszip';
+
 import {
   ArrowLeft, CloudUpload, RotateCcw, Trash2, CheckCircle, AlertCircle,
-  Database, FolderOpen, FileText, Clock, Lock, RefreshCw, Calendar, Check,
+  Database, FolderOpen, FileText, Clock, Lock, RefreshCw, Calendar, Check, Download,
 } from 'lucide-react';
 
 type Tab = 'backup' | 'restore';
@@ -68,6 +71,86 @@ export default function BackupPage() {
     onError: (e: Error) => { setRestoringId(null); showToast('error', e.message); },
   });
 
+  const downloadAllMutation = useMutation({
+    mutationFn: async () => {
+      const zip = new JSZip();
+      
+      const [folders, registers] = await Promise.all([
+        listFolders(businessId!),
+        listRegisters(businessId!)
+      ]);
+
+      const { evaluateFormula } = await import('../lib/api');
+      const XLSX = await import('xlsx');
+
+      const folderMap = new Map<number, string>();
+      folders.forEach(f => folderMap.set(f.id, f.name));
+
+      const fullRegisters = await Promise.all(
+        registers.map(async (r) => {
+          try {
+            return await getRegister(r.id);
+          } catch (err) {
+            console.error(`Failed to fetch register ${r.id}:`, err);
+            return null;
+          }
+        })
+      );
+
+      for (const reg of fullRegisters) {
+        if (!reg) continue;
+        
+        const cols = (reg.columns || []).sort((a, b) => a.position - b.position);
+        const visibleCols = cols.filter(c => c.type !== 'image');
+        const headerRow = ['S.No.', ...visibleCols.map(c => c.name)];
+        const dataAOA: any[][] = [headerRow];
+
+        (reg.entries || []).forEach((entry, idx) => {
+          const rowData: any[] = [idx + 1];
+          visibleCols.forEach(c => {
+            const val = c.type === 'formula' 
+              ? evaluateFormula(c.formula || '', entry, cols)
+              : (entry.cells?.[c.id.toString()] || '');
+            
+            // Clean numeric values for Excel
+            if (c.type === 'number' || c.type === 'currency' || c.type === 'formula') {
+                const cleaned = val.toString().replace(/[^\d.-]/g, '');
+                const n = parseFloat(cleaned);
+                rowData.push(isNaN(n) ? val : n);
+            } else {
+                rowData.push(val);
+            }
+          });
+          dataAOA.push(rowData);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(dataAOA);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Records");
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+        const folderName = reg.folderId ? folderMap.get(reg.folderId) || 'Unorganized' : 'Unorganized';
+        // Sanitize filename
+        const safeRegName = reg.name.replace(/[\\/:*?"<>|]/g, '_');
+        zip.file(`${folderName}/${safeRegName}.xlsx`, excelBuffer);
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const now = new Date();
+      const timestamp = `${now.getDate().toString().padStart(2, '0')}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}-${now.getMinutes().toString().padStart(2, '0')}`;
+      const filename = `AG Trust [${timestamp}].zip`;
+
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
+    onSuccess: () => showToast('success', 'Full backup downloaded successfully!'),
+    onError: (err: any) => showToast('error', `Download failed: ${err.message}`),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteBackup(id),
     onSuccess: () => {
@@ -122,10 +205,10 @@ export default function BackupPage() {
         <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}>
           <ArrowLeft size={22} />
         </button>
-        <img src="/logo.jpg" alt="Easy Record" style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '6px', background: '#fff', padding: '0' }} />
+        <img src="/logo-transparent.png" alt="AG Trust" style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '6px', background: 'rgba(255,255,255,0.1)', padding: '3px' }} />
         <div>
           <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Backup &amp; Restore</h1>
-          <p style={{ margin: 0, fontSize: '13px', opacity: 0.7 }}>Excel Register Book</p>
+          <p style={{ margin: 0, fontSize: '13px', opacity: 0.7 }}>AG Trust · Record Book</p>
         </div>
       </div>
 
@@ -198,26 +281,48 @@ export default function BackupPage() {
                 </div>
               )}
 
-              <button
-                onClick={() => createMutation.mutate()}
-                disabled={createMutation.isPending}
-                style={{
-                  width: '100%', padding: '14px',
-                  background: `linear-gradient(135deg, var(--primary), var(--primary-light))`,
-                  color: 'white', border: 'none', borderRadius: '12px',
-                  fontSize: '15px', fontWeight: 600, cursor: createMutation.isPending ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                  opacity: createMutation.isPending ? 0.7 : 1, transition: 'opacity 0.2s',
-                  boxShadow: '0 4px 12px rgba(13,42,92,0.15)',
-                }}
-              >
-                <CloudUpload size={20} />
-                {createMutation.isPending ? 'Creating backup…' : 'Back Up Now'}
-              </button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={() => createMutation.mutate()}
+                  disabled={createMutation.isPending}
+                  style={{
+                    flex: 1, padding: '14px',
+                    background: `linear-gradient(135deg, var(--navy), var(--navy-light))`,
+                    color: 'white', border: 'none', borderRadius: '12px',
+                    fontSize: '15px', fontWeight: 600, cursor: createMutation.isPending ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                    opacity: createMutation.isPending ? 0.7 : 1, transition: 'opacity 0.2s',
+                    boxShadow: '0 4px 12px rgba(13,42,92,0.15)',
+                  }}
+                >
+                  <CloudUpload size={20} />
+                  {createMutation.isPending ? 'Creating…' : 'Back Up Now'}
+                </button>
+
+                <button
+                  onClick={() => downloadAllMutation.mutate()}
+                  disabled={downloadAllMutation.isPending}
+                  style={{
+                    flex: 1, padding: '14px',
+                    background: `#fff`,
+                    color: 'var(--navy)', border: '1.5px solid var(--navy)', borderRadius: '12px',
+                    fontSize: '15px', fontWeight: 600, cursor: downloadAllMutation.isPending ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                    opacity: downloadAllMutation.isPending ? 0.7 : 1, transition: 'all 0.2s',
+                  }}
+                >
+                  {downloadAllMutation.isPending ? (
+                    <><RefreshCw size={20} className="animate-spin" /> Preparing ZIP...</>
+                  ) : (
+                    <><Download size={20} /> Download All (ZIP)</>
+                  )}
+                </button>
+              </div>
 
               <p style={{ textAlign: 'center', fontSize: '12px', color: '#7E8DA6', marginTop: '12px', marginBottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                 <Calendar size={13} /> Reminder every 3 days if no backup is created
               </p>
+
             </div>
 
             {/* Backup history */}

@@ -20,6 +20,7 @@ export interface User {
   id: number;
   email: string;
   name: string | null;
+  phone?: string;
   isAdmin: boolean;
   canEdit?: boolean;
   canCreateRegisters?: boolean;
@@ -484,6 +485,65 @@ export async function moveRegisterToFolder(registerId: number, folderId: number 
       delete reg.folderId;
     }
     await saveRegDocImmediate(reg);
+  });
+}
+
+export async function setColumnMandatory(registerId: number, columnId: number, mandatory: boolean): Promise<RegisterDetail> {
+  return runQueuedMutation(registerId, async () => {
+    const reg = await getRegDoc(registerId);
+    const col = reg.columns.find((c) => c.id.toString() === columnId.toString());
+    if (!col) throw new Error('Column not found');
+    (col as any).mandatory = mandatory;
+    await saveRegDocImmediate(reg);
+    return reg;
+  });
+}
+
+export async function setColumnUnique(registerId: number, columnId: number, unique: boolean): Promise<RegisterDetail> {
+  return runQueuedMutation(registerId, async () => {
+    const reg = await getRegDoc(registerId);
+    const col = reg.columns.find((c) => c.id.toString() === columnId.toString());
+    if (!col) throw new Error('Column not found');
+    (col as any).unique = unique;
+    await saveRegDocImmediate(reg);
+    return reg;
+  });
+}
+
+export async function updateEntryCellStyles(registerId: number, entryId: number, cellStyles: Record<string, CellStyle>): Promise<Entry> {
+  return runQueuedMutation(registerId, async () => {
+    const reg = await getRegDoc(registerId);
+    const entry = reg.entries.find((e) => e.id === entryId);
+    if (!entry) throw new Error('Entry not found');
+    entry.cellStyles = { ...(entry.cellStyles || {}), ...cellStyles };
+    reg.updatedAt = new Date().toISOString();
+    await saveRegDocImmediate(reg);
+    return entry;
+  });
+}
+
+export async function updateEntriesOrder(registerId: number, sortedEntries: Entry[]): Promise<void> {
+  return runQueuedMutation(registerId, async () => {
+    const reg = await getRegDoc(registerId);
+    // Overwrite the entire entries array with the new sorted array
+    reg.entries = sortedEntries;
+    renumberRows(reg); // Update row numbers to match the new order
+    reg.updatedAt = new Date().toISOString();
+    await saveRegDocImmediate(reg);
+  });
+}
+
+/**
+ * Re-calculates rowNumber for all entries in a register based on their order in the array.
+ * rowNumber is page-local (starts from 1 for each pageIndex).
+ */
+function renumberRows(reg: RegisterDetail) {
+  const pageCounters = new Map<number, number>();
+  reg.entries.forEach((e) => {
+    const pIdx = e.pageIndex || 0;
+    const current = (pageCounters.get(pIdx) || 0) + 1;
+    e.rowNumber = current;
+    pageCounters.set(pIdx, current);
   });
 }
 
@@ -1547,27 +1607,9 @@ export async function linkColumn(
 }
 
 
-export async function updateEntryCellStyles(registerId: number, entryId: number, cellStyles: Record<string, CellStyle>): Promise<Entry> {
-  return runQueuedMutation(registerId, async () => {
-    const reg = await getRegDoc(registerId);
-    const entry = reg.entries.find((e) => e.id === entryId);
-    if (!entry) throw new Error('Entry not found');
-    entry.cellStyles = { ...(entry.cellStyles || {}), ...cellStyles };
-    reg.updatedAt = new Date().toISOString();
-    await saveRegDocImmediate(reg);
-    return entry;
-  });
-}
 
-export async function updateEntriesOrder(registerId: number, sortedEntries: Entry[]): Promise<void> {
-  return runQueuedMutation(registerId, async () => {
-    const reg = await getRegDoc(registerId);
-    // Overwrite the entire entries array with the new sorted array
-    reg.entries = sortedEntries;
-    reg.updatedAt = new Date().toISOString();
-    await saveRegDocImmediate(reg);
-  });
-}
+
+
 
 export async function deleteEntry(registerId: number, entryId: number): Promise<void> {
   return runQueuedMutation(registerId, async () => {
@@ -2042,5 +2084,21 @@ export async function updateUserPermissions(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, permissions, globalPermissions }),
+  });
+}
+
+export async function deleteUser(userId: number): Promise<void> {
+  await fetchApi(`${API}/admin/users/${userId}`, { method: 'DELETE' });
+}
+
+export async function resetUserPassword(userId: number): Promise<void> {
+  await fetchApi(`${API}/admin/users/${userId}/reset-password`, { method: 'POST' });
+}
+
+export async function toggleUserStatus(userId: number, isDisabled: boolean): Promise<void> {
+  await fetchApi(`${API}/admin/users/${userId}/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isDisabled }),
   });
 }

@@ -7,6 +7,7 @@ export interface FilterRule {
   operator: string;
   value: string;
   value2?: string; // For "between" operators
+  values?: string[]; // For multi-select operators
 }
 
 interface FilterModalProps {
@@ -16,48 +17,39 @@ interface FilterModalProps {
   setFilters: (v: FilterRule[]) => void;
   setActiveFilters: (v: FilterRule[]) => void;
   columns: Column[];
+  entries: any[];
 }
 
 /* ── Operator definitions per column type ── */
 const TEXT_OPS = [
   { key: 'contains', label: 'Contains' },
-  { key: 'not_contains', label: 'Does Not Contain' },
   { key: 'equals', label: 'Is' },
-  { key: 'not_equals', label: 'Is Not' },
-  { key: 'starts_with', label: 'Starts With' },
-  { key: 'ends_with', label: 'Ends With' },
+  { key: 'multi_select', label: 'Is Any Of' },
   { key: 'empty', label: 'Is Empty' },
-  { key: 'not_empty', label: 'Is Not Empty' },
 ];
 
 const NUMBER_OPS = [
   { key: 'eq', label: 'Equals To' },
   { key: 'gt', label: 'Greater Than' },
-  { key: 'gte', label: 'Greater Than or Equal To' },
   { key: 'lt', label: 'Less Than' },
-  { key: 'lte', label: 'Less Than or Equal To' },
   { key: 'between', label: 'In Between' },
-  { key: 'not_between', label: 'Not In Between' },
+  { key: 'multi_select', label: 'Is Any Of' },
   { key: 'empty', label: 'Is Empty' },
-  { key: 'not_empty', label: 'Is Not Empty' },
 ];
 
 const DATE_OPS = [
   { key: 'date_between', label: 'In Between Dates' },
-  { key: 'date_not_between', label: 'Not Between Dates' },
   { key: 'date_is', label: 'Is' },
-  { key: 'date_not', label: 'Is Not' },
   { key: 'date_before', label: 'Is Before' },
   { key: 'date_after', label: 'Is After' },
+  { key: 'multi_select', label: 'Is Any Of' },
   { key: 'empty', label: 'Is Empty' },
-  { key: 'not_empty', label: 'Is Not Empty' },
 ];
 
 const DROPDOWN_OPS = [
   { key: 'equals', label: 'Is' },
-  { key: 'not_equals', label: 'Is Not' },
+  { key: 'multi_select', label: 'Is Any Of' },
   { key: 'empty', label: 'Is Empty' },
-  { key: 'not_empty', label: 'Is Not Empty' },
 ];
 
 function getOpsForType(type: string) {
@@ -82,11 +74,12 @@ function getColumnIcon(type: string) {
 
 const NO_VALUE_OPS = ['empty', 'not_empty'];
 const BETWEEN_OPS = ['between', 'not_between', 'date_between', 'date_not_between'];
+const MULTI_VALUE_OPS = ['multi_select'];
 
 export function FilterModal({
   filterModal, setFilterModal,
   filters, setFilters, setActiveFilters,
-  columns,
+  columns, entries
 }: FilterModalProps) {
   // "add filter" wizard state
   const [addingFilter, setAddingFilter] = useState(false);
@@ -95,6 +88,7 @@ export function FilterModal({
   const [selectedOp, setSelectedOp] = useState<string | null>(null);
   const [val1, setVal1] = useState('');
   const [val2, setVal2] = useState('');
+  const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const filteredCols = useMemo(() => {
@@ -102,6 +96,17 @@ export function FilterModal({
     const q = colSearch.toLowerCase();
     return columns.filter(c => c.name.toLowerCase().includes(q));
   }, [columns, colSearch]);
+  
+  const uniqueValues = useMemo(() => {
+    if (!selectedColId) return [];
+    const set = new Set<string>();
+    const colIdStr = selectedColId.toString();
+    entries.forEach(e => {
+      const val = e.cells?.[colIdStr];
+      if (val && val.trim()) set.add(val.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [selectedColId, entries]);
 
   const selectedCol = columns.find(c => c.id === selectedColId);
   const ops = selectedCol ? getOpsForType(selectedCol.type) : [];
@@ -113,6 +118,7 @@ export function FilterModal({
     setSelectedOp(null);
     setVal1('');
     setVal2('');
+    setSelectedValues([]);
   };
 
   // Close panel on outside click
@@ -146,8 +152,12 @@ export function FilterModal({
     
     // Validation
     if (!NO_VALUE_OPS.includes(selectedOp)) {
-      if (!val1.trim()) return;
-      if (BETWEEN_OPS.includes(selectedOp) && !val2.trim()) return;
+      if (MULTI_VALUE_OPS.includes(selectedOp)) {
+        if (selectedValues.length === 0) return;
+      } else {
+        if (!val1.trim()) return;
+        if (BETWEEN_OPS.includes(selectedOp) && !val2.trim()) return;
+      }
     }
 
     const newFilter: FilterRule = {
@@ -155,6 +165,7 @@ export function FilterModal({
       operator: selectedOp,
       value: val1.trim(),
       value2: BETWEEN_OPS.includes(selectedOp) ? val2.trim() : undefined,
+      values: MULTI_VALUE_OPS.includes(selectedOp) ? [...selectedValues] : undefined,
     };
     const updated = [...filters, newFilter];
     setFilters(updated);
@@ -202,7 +213,7 @@ export function FilterModal({
         </div>
         <div className="fdp-header-actions">
           {filters.length > 0 && (
-            <button className="fdp-clear-btn" onClick={() => setFilters([])}>Clear All</button>
+            <button className="fdp-clear-btn" onClick={() => setFilters([])}>CLEAR ALL</button>
           )}
           <button className="fdp-close-btn" onClick={() => { setFilterModal(false); resetWizard(); }} aria-label="Close">
             <X size={14} />
@@ -219,10 +230,13 @@ export function FilterModal({
             return (
               <div key={idx} className="fdp-chip">
                 <Icon size={12} />
-                <span className="fdp-chip-col">{col?.name || 'Col'}</span>
+                <span className="fdp-chip-col">{col?.name}</span>
                 <span className="fdp-chip-op">{getOpLabel(f.operator, col?.type || 'text')}</span>
-                {!NO_VALUE_OPS.includes(f.operator) && (
+                {!NO_VALUE_OPS.includes(f.operator) && !MULTI_VALUE_OPS.includes(f.operator) && (
                   <span className="fdp-chip-val">"{f.value}"</span>
+                )}
+                {MULTI_VALUE_OPS.includes(f.operator) && f.values && (
+                  <span className="fdp-chip-val">({f.values.length} selected)</span>
                 )}
                 {BETWEEN_OPS.includes(f.operator) && f.value2 && (
                   <span className="fdp-chip-val">to "{f.value2}"</span>
@@ -244,109 +258,147 @@ export function FilterModal({
       ) : (
         <div className="fdp-wizard">
           <div className="fdp-wizard-header">
-            <span>ADD FILTER</span>
-            <button className="fdp-close-btn" onClick={resetWizard}><X size={13} /></button>
+            <span>{selectedColId === null ? 'SELECT COLUMN' : 'SELECT OPERATOR'}</span>
+            <button className="fdp-wizard-close" onClick={resetWizard}><X size={13} /></button>
           </div>
 
-          {/* Step 1: Column list */}
-          <div className="fdp-col-search">
-            <Search size={13} />
-            <input
-              placeholder="Search columns..."
-              value={colSearch}
-              onChange={(e) => setColSearch(e.target.value)}
-              autoFocus
-            />
-          </div>
+          <div className="fdp-wizard-content">
+            {/* Step 1: Column Selection */}
+            {selectedColId === null ? (
+              <>
+                <div className="fdp-col-search">
+                  <Search size={14} color="#999" />
+                  <input
+                    placeholder="SEARCH COLUMNS..."
+                    value={colSearch}
+                    onChange={(e) => setColSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="fdp-col-list">
+                  {filteredCols.map(c => {
+                    const Icon = getColumnIcon(c.type);
+                    return (
+                      <button key={c.id} className="fdp-col-item" onClick={() => setSelectedColId(c.id)}>
+                        <Icon size={16} />
+                        <span className="fdp-col-name">{c.name}</span>
+                        <ChevronRight size={14} className="fdp-col-arrow" />
+                      </button>
+                    );
+                  })}
+                  {filteredCols.length === 0 && (
+                    <div className="fdp-no-options">No columns found</div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* Step 2: Operator Selection OR Value Config */
+              <div className="fdp-op-selection">
+                {/* Back to Column Selection */}
+                <div className="fdp-selection-header" onClick={() => { setSelectedColId(null); setSelectedOp(null); }}>
+                  <ChevronDown size={14} className="fdp-back-arrow" style={{ transform: 'rotate(90deg)' }} />
+                  <span className="fdp-selected-col-name">{selectedCol?.name}</span>
+                </div>
 
-          <div className="fdp-col-list">
-            {filteredCols.map(col => {
-              const Icon = getColumnIcon(col.type);
-              const isSelected = col.id === selectedColId;
-              return (
-                <button
-                  key={col.id}
-                  className={`fdp-col-item ${isSelected ? 'active' : ''}`}
-                  onClick={() => { setSelectedColId(col.id); setSelectedOp(null); setVal1(''); setVal2(''); }}
-                >
-                  <Icon size={13} />
-                  <span>{col.name}</span>
-                  {isSelected && <ChevronRight size={13} className="fdp-arrow" />}
-                </button>
-              );
-            })}
-          </div>
+                {selectedOp === null ? (
+                  /* List Operators */
+                  <div className="fdp-op-list">
+                    {ops.map(op => (
+                      <button key={op.key} className="fdp-op-item" onClick={() => setSelectedOp(op.key)}>
+                        <div className="fdp-radio-circle" />
+                        <span>{op.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  /* Step 3: Configure Value */
+                  <div className="fdp-value-config">
+                    <div className="fdp-op-display" onClick={() => setSelectedOp(null)} style={{ cursor: 'pointer' }}>
+                      <div className="fdp-radio-circle selected" />
+                      <span>{ops.find(o => o.key === selectedOp)?.label}</span>
+                    </div>
 
-          {/* Step 2: Condition list */}
-          {selectedCol && (
-            <>
-              <div className="fdp-section-label">{selectedCol.name.toUpperCase()}</div>
-              <div className="fdp-op-list">
-                {ops.map(op => (
-                  <button
-                    key={op.key}
-                    className={`fdp-op-item ${selectedOp === op.key ? 'active' : ''}`}
-                    onClick={() => { setSelectedOp(op.key); setVal1(''); setVal2(''); }}
-                  >
-                    <div className={`fdp-radio ${selectedOp === op.key ? 'checked' : ''}`} />
-                    <span>{op.label}</span>
-                  </button>
-                ))}
+                    <div className="fdp-value-area">
+                      {selectedOp === 'multi_select' ? (
+                        <div className="fdp-multi-list">
+                          <label className="fdp-multi-item">
+                            <input
+                              type="checkbox"
+                              checked={selectedValues.includes('(Blanks)')}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedValues(['(Blanks)', ...selectedValues]);
+                                else setSelectedValues(selectedValues.filter(v => v !== '(Blanks)'));
+                              }}
+                            />
+                            <span>(BLANKS)</span>
+                          </label>
+                          {(selectedCol?.type === 'dropdown' ? (selectedCol.dropdownOptions || []) : uniqueValues).map(opt => (
+                            <label key={opt} className="fdp-multi-item">
+                              <input
+                                type="checkbox"
+                                checked={selectedValues.includes(opt)}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedValues([...selectedValues, opt]);
+                                  else setSelectedValues(selectedValues.filter(v => v !== opt));
+                                }}
+                              />
+                              <span>{opt.toUpperCase()}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : selectedCol?.type === 'dropdown' ? (
+                        <select
+                          className="fdp-input"
+                          value={val1}
+                          onChange={(e) => setVal1(e.target.value)}
+                          autoFocus
+                        >
+                          <option value="">SELECT VALUE...</option>
+                          {(selectedCol.dropdownOptions || []).map(opt => (
+                            <option key={opt} value={opt}>{opt.toUpperCase()}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <>
+                          <input
+                            className="fdp-input"
+                            type={getInputType(selectedOp, selectedCol?.type || 'text')}
+                            placeholder={BETWEEN_OPS.includes(selectedOp) ? 'FROM VALUE...' : 'ENTER VALUE...'}
+                            value={val1}
+                            onChange={(e) => setVal1(e.target.value)}
+                            autoFocus
+                          />
+                          {BETWEEN_OPS.includes(selectedOp) && (
+                            <input
+                              className="fdp-input"
+                              type={getInputType(selectedOp, selectedCol?.type || 'text')}
+                              placeholder="TO VALUE..."
+                              value={val2}
+                              onChange={(e) => setVal2(e.target.value)}
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="fdp-wizard-actions">
+                      <button className="fdp-cancel-btn" onClick={() => setSelectedOp(null)}>BACK</button>
+                      <button
+                        className="fdp-confirm-btn"
+                        disabled={
+                          (!NO_VALUE_OPS.includes(selectedOp) && !MULTI_VALUE_OPS.includes(selectedOp) && !val1) ||
+                          (MULTI_VALUE_OPS.includes(selectedOp) && selectedValues.length === 0) ||
+                          (BETWEEN_OPS.includes(selectedOp) && !val2)
+                        }
+                        onClick={handleAddFilter}
+                      >
+                        ADD FILTER
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </>
-          )}
-
-          {/* Step 3: Value input */}
-          {selectedOp && !NO_VALUE_OPS.includes(selectedOp) && (
-            <div className="fdp-value-area">
-              {selectedCol?.type === 'dropdown' ? (
-                <select
-                  className="fdp-input"
-                  value={val1}
-                  onChange={(e) => setVal1(e.target.value)}
-                >
-                  <option value="">Select value...</option>
-                  {(selectedCol.dropdownOptions || []).map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  className="fdp-input"
-                  type={getInputType(selectedOp, selectedCol?.type || 'text')}
-                  placeholder={BETWEEN_OPS.includes(selectedOp) ? 'From value...' : 'Enter value...'}
-                  value={val1}
-                  onChange={(e) => setVal1(e.target.value)}
-                  autoFocus
-                />
-              )}
-              {BETWEEN_OPS.includes(selectedOp) && (
-                <input
-                  className="fdp-input"
-                  type={getInputType(selectedOp, selectedCol?.type || 'text')}
-                  placeholder="To value..."
-                  value={val2}
-                  onChange={(e) => setVal2(e.target.value)}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Wizard footer */}
-          <div className="fdp-wizard-actions">
-            <button className="fdp-cancel-btn" onClick={resetWizard}>Cancel</button>
-            <button
-              className="fdp-confirm-btn"
-              disabled={
-                selectedColId === null ||
-                !selectedOp ||
-                (!NO_VALUE_OPS.includes(selectedOp) && !val1) ||
-                (BETWEEN_OPS.includes(selectedOp) && !val2)
-              }
-              onClick={handleAddFilter}
-            >
-              Add
-            </button>
+            )}
           </div>
         </div>
       )}
@@ -354,16 +406,18 @@ export function FilterModal({
       {/* ── Empty state ── */}
       {filters.length === 0 && !addingFilter && (
         <div className="fdp-empty">
-          <Filter size={20} />
-          <p>No filters applied</p>
+          <Filter size={32} strokeWidth={1.5} color="#eee" />
+          <p style={{ fontWeight: 600, textTransform: 'uppercase', fontSize: '11px', color: '#ccc', marginTop: '12px' }}>
+            No filters applied
+          </p>
         </div>
       )}
 
       {/* ── Footer ── */}
       <div className="fdp-footer">
-        <button className="fdp-cancel-btn" onClick={handleClearClose}>Clear & Close</button>
+        <button className="fdp-cancel-btn" style={{ border: 'none' }} onClick={handleClearClose}>CANCEL</button>
         <button className="fdp-apply-btn" onClick={handleApply}>
-          Apply {filters.length > 0 && `(${filters.length})`}
+          APPLY {filters.length > 0 && `(${filters.length})`}
         </button>
       </div>
     </div>
