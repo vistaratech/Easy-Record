@@ -16,6 +16,20 @@ function genId() {
   return Date.now() + Math.floor(Math.random() * 1000);
 }
 
+async function logAction(client, businessId, action, details, meta = {}) {
+  const { userName, registerName, registerId } = meta;
+  const id = genId();
+  try {
+    await client.query(
+      'INSERT INTO history (id, business_id, action, details, user_name, register_name, register_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, businessId, action, details, userName || null, registerName || null, registerId || null]
+    );
+  } catch (err) {
+    console.error('Logging error:', err);
+    // Don't throw, logging shouldn't break the main flow
+  }
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'easy-record-super-secret-jwt-key';
 
 // ── AUTH ──
@@ -66,6 +80,10 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    if (user.disabled) {
+      return res.status(403).json({ error: 'This account has been disabled by an administrator' });
+    }
+
     const token = jwt.sign({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, createdAt: user.created_at } });
   } catch (err) {
@@ -93,6 +111,9 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = rows[0];
+    if (user.disabled) {
+      return res.status(403).json({ error: 'This account has been disabled' });
+    }
     res.json({ id: user.id, email: user.email, name: user.name, isAdmin: user.is_admin, canEdit: user.can_edit, canCreateRegisters: user.can_create_registers, canCreateTemplates: user.can_create_templates, createdAt: user.created_at });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
@@ -993,6 +1014,11 @@ app.delete('/api/admin/users/:userId', authenticateToken, adminOnly, async (req,
 
     await client.query('COMMIT');
     console.log(`Admin ${req.user.id} deleted user ${userId}`);
+    
+    // Log the deletion (using the admin's business context if available)
+    // Note: Since the user is deleted, we just log the action globally
+    await logAction(pool, 1, 'Admin Action', `Deleted user ID: ${userId}`, { userName: `Admin ${req.user.name}` });
+    
     res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1011,6 +1037,9 @@ app.post('/api/admin/users/:userId/reset-password', authenticateToken, adminOnly
     const hashed = await bcrypt.hash(tempPassword, 10);
     const { rowCount } = await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, userId]);
     if (rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    
+    await logAction(pool, 1, 'Admin Action', `Reset password for user ID: ${userId}`, { userName: `Admin ${req.user.name}` });
+    
     res.json({ ok: true, tempPassword }); // In production, send via email instead
   } catch (err) {
     console.error('Reset password error:', err);
@@ -1025,6 +1054,9 @@ app.put('/api/admin/users/:userId/status', authenticateToken, adminOnly, async (
   try {
     // Requires a `disabled` column — add with: ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
     await pool.query('UPDATE users SET disabled = $1 WHERE id = $2', [!!isDisabled, userId]);
+    
+    await logAction(pool, 1, 'Admin Action', `${isDisabled ? 'Disabled' : 'Enabled'} user ID: ${userId}`, { userName: `Admin ${req.user.name}` });
+    
     res.json({ ok: true });
   } catch (err) {
     // Column may not exist yet — gracefully handle

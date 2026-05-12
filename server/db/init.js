@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   can_edit BOOLEAN DEFAULT FALSE,
   can_create_registers BOOLEAN DEFAULT FALSE,
   can_create_templates BOOLEAN DEFAULT FALSE,
+  disabled BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
