@@ -235,6 +235,13 @@
   border-radius: 4px; text-transform: uppercase;
 }
 
+.badge-error {
+  display: inline-block;
+  background: #fee2e2; color: #dc2626;
+  font-size: 10px; font-weight: 600; padding: 1px 6px;
+  border-radius: 4px; text-transform: uppercase;
+}
+
 .user-card-right { display: flex; gap: 24px; align-items: center; }
 
 .user-meta-item { display: flex; flex-direction: column; gap: 1px; }
@@ -558,6 +565,11 @@
 
 .adm-user-item.active {
   color: #fff; background: rgba(59,130,246,0.1);
+}
+
+.adm-user-item.disabled {
+  opacity: 0.5;
+  filter: grayscale(1);
 }
 
 .adm-user-item .u-dot {

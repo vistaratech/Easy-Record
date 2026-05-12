@@ -287,9 +287,9 @@ export default function AdminDashboard() {
           }
           break;
         case 'disable':
-          const isCurrentlyDisabled = user.phone === 'disabled';
-          await toggleUserStatus(userId, !isCurrentlyDisabled);
-          toast.success(isCurrentlyDisabled ? 'User enabled' : 'User disabled');
+          const nextDisabled = !user.disabled;
+          await toggleUserStatus(userId, nextDisabled);
+          toast.success(nextDisabled ? 'User disabled' : 'User enabled');
           await fetchInitialData();
           break;
         default:
@@ -351,17 +351,17 @@ export default function AdminDashboard() {
                 <span style={{ fontSize: 12, fontWeight: 600 }}>Create New User</span>
               </button>
               {users.map(u => (
-                <button
-                  key={u.id}
-                  className={`adm-user-item ${selectedUserId === u.id ? 'active' : ''}`}
-                  onClick={() => handleUserSelect(u)}
-                >
-                  <div className="u-dot" />
-                  <div className="u-info">
-                    <span className="u-name">{u.name || u.email}</span>
-                    <span className="u-role">{u.isAdmin ? 'Admin' : 'User'}</span>
-                  </div>
-                </button>
+                  <button
+                    key={u.id}
+                    className={`adm-user-item ${selectedUserId === u.id ? 'active' : ''} ${u.disabled ? 'disabled' : ''}`}
+                    onClick={() => handleUserSelect(u)}
+                  >
+                    <div className="u-dot" style={{ background: u.disabled ? '#ef4444' : (u.isAdmin ? '#3b82f6' : '#22c55e') }} />
+                    <div className="u-info">
+                      <span className="u-name">{u.name || u.email}</span>
+                      <span className="u-role">{u.isAdmin ? 'Admin' : 'User'}{u.disabled ? ' (Disabled)' : ''}</span>
+                    </div>
+                  </button>
               ))}
             </div>
           )}
@@ -479,6 +479,7 @@ export default function AdminDashboard() {
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
+                        <th>Status</th>
                         <th>Joined</th>
                         <th style={{ width: 40 }}></th>
                       </tr>
@@ -490,6 +491,11 @@ export default function AdminDashboard() {
                           <td style={{ fontWeight: 500 }}>{u.name || '—'}</td>
                           <td style={{ color: '#64748b' }}>{u.email}</td>
                           <td><span className={u.isAdmin ? 'badge-ok' : 'badge-no'}>{u.isAdmin ? 'Admin' : 'User'}</span></td>
+                          <td>
+                            <span className={u.disabled ? 'badge-error' : 'badge-active'}>
+                              {u.disabled ? 'Disabled' : 'Active'}
+                            </span>
+                          </td>
                           <td style={{ color: '#64748b' }}>{new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                           <td style={{ position: 'relative', overflow: 'visible' }} onClick={e => e.stopPropagation()}>
                             <button className="btn-icon-ghost" onClick={() => setUserMenuOpenId(userMenuOpenId === u.id ? null : u.id)}>
@@ -509,8 +515,8 @@ export default function AdminDashboard() {
                                     <Key size={14} /> Reset Password
                                   </button>
                                   <button className="dropdown-item" onClick={() => handleUserAction(u.id, 'disable')}>
-                                    {u.isAdmin ? <UserX size={14} /> : <UserCheck size={14} />} 
-                                    {u.isAdmin ? 'Disable User' : 'Enable User'}
+                                    {u.disabled ? <UserCheck size={14} /> : <UserX size={14} />} 
+                                    {u.disabled ? 'Enable User' : 'Disable User'}
                                   </button>
                                   <div className="dropdown-divider" />
                                   <button className="dropdown-item text-red" onClick={() => handleUserAction(u.id, 'delete')}>
@@ -541,7 +547,9 @@ export default function AdminDashboard() {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <h2 className="user-card-name">{selectedUser.name || 'Unnamed User'}</h2>
-                          <span className="badge-active">Active</span>
+                          <span className={selectedUser.disabled ? 'badge-error' : 'badge-active'}>
+                            {selectedUser.disabled ? 'Disabled' : 'Active'}
+                          </span>
                         </div>
                         <p className="user-card-email">{selectedUser.email}</p>
                       </div>

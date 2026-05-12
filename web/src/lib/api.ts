@@ -25,6 +25,7 @@ export interface User {
   canEdit?: boolean;
   canCreateRegisters?: boolean;
   canCreateTemplates?: boolean;
+  disabled?: boolean;
   createdAt: string;
 }
 
