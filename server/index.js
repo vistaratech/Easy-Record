@@ -12,18 +12,27 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // ── Database Migration/Schema Check ──
-(async () => {
+const runMigrations = async () => {
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ CRITICAL: DATABASE_URL is not set in environment variables.');
+    return;
+  }
+  
   try {
+    console.log('🔄 Checking database schema...');
     // Ensure 'disabled' column exists in users table
     await pool.query(`
       ALTER TABLE users 
       ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
     `);
-    console.log('Database schema verified: "disabled" column present.');
+    console.log('✅ Database schema verified: "disabled" column present.');
   } catch (err) {
-    console.error('Database migration error:', err);
+    console.error('❌ Database migration error:', err.message);
   }
-})();
+};
+
+// Run migrations in background (non-blocking for serverless startup)
+runMigrations();
 
 // ── Helper ──
 function genId() {
