@@ -11,6 +11,20 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+// ── Database Migration/Schema Check ──
+(async () => {
+  try {
+    // Ensure 'disabled' column exists in users table
+    await pool.query(`
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
+    `);
+    console.log('Database schema verified: "disabled" column present.');
+  } catch (err) {
+    console.error('Database migration error:', err);
+  }
+})();
+
 // ── Helper ──
 function genId() {
   return Date.now() + Math.floor(Math.random() * 1000);
@@ -93,16 +107,33 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Auth Middleware
-const authenticateToken = (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) return res.status(403).json({ error: 'Forbidden' });
-    req.user = user;
-    next();
+    
+    try {
+      // Robust check: Verify user still exists and is not disabled
+      const { rows } = await pool.query('SELECT id, email, is_admin, disabled FROM users WHERE id = $1', [decoded.id]);
+      if (rows.length === 0) return res.status(401).json({ error: 'User no longer exists' });
+      
+      const user = rows[0];
+      if (user.disabled) {
+        return res.status(403).json({ error: 'This account has been disabled by an administrator' });
+      }
+
+      req.user = user;
+      next();
+    } catch (dbErr) {
+      console.error('Auth middleware DB error:', dbErr);
+      // Fallback: if DB is down, still allow if token is valid? 
+      // Better to block or use decoded info? Usually better to block if security is priority.
+      res.status(500).json({ error: 'Internal server error during authentication' });
+    }
   });
 };
 
@@ -138,7 +169,13 @@ const adminOnly = async (req, res, next) => {
 // Permission check helper
 async function checkRegisterPermission(userId, registerId, type = 'view') {
   const { rows: userRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [userId]);
-  // Strict permission check: only honor user_permissions table
+  if (userRows.length === 0) return false;
+  
+  const user = userRows[0];
+  // Admins have full access to everything
+  if (user.is_admin) return true;
+
+  // Strict permission check: only honor user_permissions table for normal users
   const { rows: perms } = await pool.query(
     'SELECT can_view, can_edit, can_download FROM user_permissions WHERE user_id = $1 AND register_id = $2',
     [userId, registerId]
