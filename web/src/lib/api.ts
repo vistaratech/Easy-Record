@@ -373,7 +373,7 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
   // MIGRATION: Fix duplicate IDs caused by precision loss in older Excel imports
   let hasDuplicates = false;
   const seenIds = new Set<number>();
-  reg.entries.forEach((e, idx) => {
+  reg.entries.forEach((e) => {
     if (seenIds.has(e.id)) {
       hasDuplicates = true;
       e.id = generateId(); // Reassign a truly unique ID
@@ -408,7 +408,7 @@ export async function createRegister(data: {
     category: data.category || 'general', template: data.template || data.name,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: 0,
     columns: (data.columns || []).map((c, i) => ({
-      id: newId + i + 1, registerId: newId, name: c.name, type: c.type,
+      id: generateId(), registerId: newId, name: c.name, type: c.type,
       position: i, dropdownOptions: c.dropdownOptions, formula: c.formula,
       width: c.width, summary: c.summary,
     })),
@@ -472,9 +472,9 @@ export async function duplicateRegister(registerId: number): Promise<RegisterSum
       ...JSON.parse(JSON.stringify(reg)), id: newId, name: `${reg.name} (Copy)`,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: reg.entries.length,
     };
-    duplicated.columns = duplicated.columns.map((c: Column, i: number) => ({ ...c, id: newId + i + 1, registerId: newId }));
-    duplicated.entries = duplicated.entries.map((e: Entry, i: number) => ({ ...e, id: newId + 1000 + i, registerId: newId }));
-    duplicated.pages = duplicated.pages.map((p: Page, i: number) => ({ ...p, id: newId + 2000 + i }));
+    duplicated.columns = duplicated.columns.map((c: Column) => ({ ...c, id: generateId(), registerId: newId }));
+    duplicated.entries = duplicated.entries.map((e: Entry) => ({ ...e, id: generateId(), registerId: newId }));
+    duplicated.pages = duplicated.pages.map((p: Page) => ({ ...p, id: generateId() }));
     await saveRegDocImmediate(duplicated);
     return duplicated;
   });

@@ -537,7 +537,7 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
 
     const id = genId();
     const cols = (columns || []).map((c, i) => ({ 
-      id: id + i + 1, 
+      id: genId(), 
       registerId: id, 
       name: c.name, 
       type: c.type, 
@@ -577,7 +577,7 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
       const values = [];
       const params = [];
       for (let i = 0; i < 10; i++) {
-        const eId = id + 5000 + i;
+        const eId = genId();
         const offset = i * 6;
         values.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
         params.push(eId, id, i + 1, '{}', '{}', 0);
