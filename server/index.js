@@ -206,7 +206,7 @@ const canDownload = (userId, regId) => checkRegisterPermission(userId, regId, 'd
 
 // ── ADMIN ──
 // Temporarily removed authenticateToken and adminOnly to allow direct access for testing
-app.get('/api/admin/stats', async (req, res) => {
+app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT COUNT(*) as "userCount" FROM users');
     res.json({ userCount: parseInt(rows[0].userCount, 10) });
@@ -215,7 +215,7 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
-app.get('/api/admin/users', async (req, res) => {
+app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT id, email, name, is_admin AS "isAdmin", can_edit AS "canEdit", can_create_registers AS "canCreateRegisters", can_create_templates AS "canCreateTemplates", created_at AS "createdAt" FROM users ORDER BY created_at DESC');
     console.log(`Admin user list fetch: found ${rows.length} users`);
@@ -244,7 +244,7 @@ app.put('/api/admin/users/:userId/global-permissions', authenticateToken, adminO
   }
 });
 
-app.get('/api/admin/users/:userId/permissions', async (req, res) => {
+app.get('/api/admin/users/:userId/permissions', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { userId } = req.params;
     // Get registers that belong to businesses owned by the selected user
@@ -269,7 +269,7 @@ app.get('/api/admin/users/:userId/permissions', async (req, res) => {
   }
 });
 
-app.post('/api/admin/permissions', authenticateToken, async (req, res) => {
+app.post('/api/admin/permissions', authenticateToken, adminOnly, async (req, res) => {
   const { userId, permissions } = req.body; // permissions: [{ registerId, canView, canEdit, canDownload }, ...]
   
   const client = await pool.connect();
@@ -622,25 +622,31 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
     const id = req.params.id === 'NaN' ? null : req.params.id;
     if (!id) return res.status(400).json({ error: 'Invalid register ID provided.' });
 
-    // 2. Resolve Business ID
+    // 2. Resolve or Verify Register existence and Business ID
+    const { rows: existing } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [id]);
     let businessId = Number(reg.businessId);
-    if (!businessId || isNaN(businessId)) {
+    
+    // If it exists, we MUST use its existing business_id to prevent accidental migration/access bypass
+    if (existing.length > 0) {
+      businessId = existing[0].business_id;
+    } else if (!businessId || isNaN(businessId)) {
+      // For new registers, if businessId is missing, find one the user owns
       const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
       if (bizRows.length > 0) businessId = Number(bizRows[0].id);
     }
+
     if (!businessId || isNaN(businessId)) {
       return res.status(400).json({ error: 'A valid business is required to save a register.' });
     }
 
     // 3. Check Permissions
-    const { rows: existing } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [id]);
     const { rows: saveUserRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
     const saveUser = saveUserRows[0];
     const saveIsAdmin = saveUser?.is_admin;
 
     if (existing.length > 0) {
       // Existing register: admins/owners can always edit; others need explicit canEdit
-      const { rows: bizOwner } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [existing[0].business_id, req.user.id]);
+      const { rows: bizOwner } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
       const isOwner = bizOwner.length > 0;
       if (!saveIsAdmin && !isOwner) {
         if (!(await canEdit(req.user.id, id))) {
@@ -648,10 +654,11 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
         }
       }
     } else {
-      // New register: Check global creation permission
+      // New register: Check global creation permission or ownership
       const canCreateGlobal = saveUser?.can_edit;
       const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
       const isOwner = bizCheck.length > 0;
+      
       if (!saveIsAdmin && !isOwner && !canCreateGlobal) {
         return res.status(403).json({ error: 'Permission denied: Creation privilege required.' });
       }
@@ -685,11 +692,11 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
       id,
       businessId,
       reg.folderId ? Number(reg.folderId) : null,
-      reg.name,
+      reg.name || reg.title || 'Untitled Register',
       reg.icon || 'file-text',
       reg.iconColor || null,
       reg.category || 'general',
-      reg.template || reg.name,
+      reg.template || reg.name || reg.title || 'General',
       JSON.stringify(reg.columns || []),
       JSON.stringify(reg.pages || [{id:1, name:'Page 1', index:0}]),
       reg.shareLink || null,
@@ -699,7 +706,7 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
     ]);
 
     // 5. Upsert Entries (if provided)
-    if (reg.entries && reg.entries.length > 0) {
+    if (reg.entries) {
       await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
       const chunkSize = 1000;
       for (let i = 0; i < reg.entries.length; i += chunkSize) {
@@ -708,7 +715,7 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
         const cParams = [];
         for (let j = 0; j < chunk.length; j++) {
           const e = chunk[j];
-          const entryId = Number(e.id) || (Number(id) + 5000 + i + j);
+          const entryId = e.id ? Number(e.id) : genId();
           const offset = j * 6;
           cValues.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
           cParams.push(
@@ -720,7 +727,14 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
             Number(e.pageIndex) || 0
           );
         }
-        await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${cValues.join(',')}`, cParams);
+        await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) 
+                         VALUES ${cValues.join(',')}
+                         ON CONFLICT (id) DO UPDATE SET
+                           register_id = EXCLUDED.register_id,
+                           row_number = EXCLUDED.row_number,
+                           cells = EXCLUDED.cells,
+                           cell_styles = EXCLUDED.cell_styles,
+                           page_index = EXCLUDED.page_index`, cParams);
       }
     }
 

@@ -247,7 +247,9 @@ function updateMutationCount(delta: number) {
 
 async function runQueuedMutation<T>(registerId: number | string, op: () => Promise<T>): Promise<T> {
   const key = registerId.toString();
-  const currentQueue = registerMutationQueues.get(key) || Promise.resolve();
+  // Ensure the previous promise chain is always resolved before starting the next operation
+  const currentQueue = (registerMutationQueues.get(key) || Promise.resolve()).catch(() => {});
+  
   updateMutationCount(1);
   const next = currentQueue.then(op).finally(() => {
     updateMutationCount(-1);
@@ -255,6 +257,7 @@ async function runQueuedMutation<T>(registerId: number | string, op: () => Promi
     console.error(`Mutation failed for register ${key}:`, err);
     throw err;
   });
+  
   registerMutationQueues.set(key, next);
   return next;
 }
@@ -373,7 +376,7 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
   reg.entries.forEach((e, idx) => {
     if (seenIds.has(e.id)) {
       hasDuplicates = true;
-      e.id = reg.id + 10000 + idx; // Reassign a unique ID based on safe offset logic
+      e.id = generateId(); // Reassign a truly unique ID
     }
     seenIds.add(e.id);
   });
@@ -414,7 +417,7 @@ export async function createRegister(data: {
   if (newReg.columns.length > 0) {
     for (let i = 0; i < 10; i++) {
       newReg.entries.push({
-        id: newId + 5000 + i, registerId: newId, rowNumber: i + 1,
+        id: generateId(), registerId: newId, rowNumber: i + 1,
         cells: {}, createdAt: new Date().toISOString(), pageIndex: 0,
       });
     }
