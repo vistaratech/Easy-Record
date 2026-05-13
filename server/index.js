@@ -11,14 +11,34 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// ── Database Migration/Schema Check ──
+// ── Database Connection & Migration/Schema Check ──
 const runMigrations = async () => {
   if (!process.env.DATABASE_URL) {
-    console.error('❌ CRITICAL: DATABASE_URL is not set in environment variables.');
+    console.error('');
+    console.error('❌ CRITICAL ERROR: DATABASE_URL is not set in environment variables.');
+    console.error('');
+    console.error('📋 To fix this issue:');
+    console.error('   1. Create a .env file in the server directory');
+    console.error('   2. Copy the contents from .env.example');
+    console.error('   3. Set DATABASE_URL to your PostgreSQL connection string');
+    console.error('   4. Example: DATABASE_URL=postgresql://user:pass@localhost:5432/easy_record');
+    console.error('   5. Restart the server');
+    console.error('');
+    console.error('💡 For setup help, see: https://neon.tech/docs/ (for Neon PostgreSQL)');
+    console.error('');
+    // In production, exit immediately; in development, continue for now
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
     return;
   }
   
   try {
+    console.log('🔌 Testing database connection...');
+    // Test connection
+    const result = await pool.query('SELECT NOW()');
+    console.log('✅ Database connection successful');
+    
     console.log('🔄 Checking database schema...');
     // Ensure 'disabled' column exists in users table
     await pool.query(`
@@ -27,16 +47,23 @@ const runMigrations = async () => {
     `);
     console.log('✅ Database schema verified: "disabled" column present.');
   } catch (err) {
-    console.error('❌ Database migration error:', err.message);
+    console.error('❌ Database error:', err.message);
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
   }
 };
 
-// Run migrations in background (non-blocking for serverless startup)
-runMigrations();
+// Run migrations immediately to catch connection issues early
+console.log('🚀 Easy Record Server Starting...');
+await runMigrations();
 
 // ── Helper ──
+let lastGenId = 0;
 function genId() {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  const now = Date.now();
+  lastGenId = now <= lastGenId ? lastGenId + 1 : now;
+  return lastGenId;
 }
 
 async function logAction(client, businessId, action, details, meta = {}) {
@@ -505,13 +532,19 @@ app.get('/api/registers/:id', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/registers', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const { businessId: reqBusinessId, folderId, name, icon, iconColor, category, template, columns } = req.body;
     
     // 1. Resolve User Permissions
-    const { rows: userCheck } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
+    const { rows: userCheck } = await client.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
     const user = userCheck[0];
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(404).json({ error: 'User not found' });
+    }
     
     const isAdmin = user.is_admin;
     const canCreateGlobal = user.can_edit;
@@ -519,19 +552,23 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
     // 2. Resolve Business ID
     let businessId = Number(reqBusinessId);
     if (!businessId || isNaN(businessId)) {
-      const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
+      const { rows: bizRows } = await client.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
       if (bizRows.length > 0) businessId = Number(bizRows[0].id);
     }
 
     if (!businessId || isNaN(businessId)) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ error: 'A valid business is required to create a register.' });
     }
 
     // 3. Permission Check
-    const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
+    const { rows: bizCheck } = await client.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [businessId, req.user.id]);
     const isOwner = bizCheck.length > 0;
 
     if (!isAdmin && !isOwner && !canCreateGlobal) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(403).json({ error: 'Permission denied: Creation privilege required.' });
     }
 
@@ -549,7 +586,7 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
     }));
     const pages = [{ id: 1, name: 'Page 1', index: 0 }];
 
-    await pool.query(
+    await client.query(
       `INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
         id, 
@@ -567,7 +604,7 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
     );
 
     // Grant the creator full access by default
-    await pool.query(
+    await client.query(
       'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE)',
       [req.user.id, id]
     );
@@ -582,12 +619,18 @@ app.post('/api/registers', authenticateToken, async (req, res) => {
         values.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
         params.push(eId, id, i + 1, '{}', '{}', 0);
       }
-      await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${values.join(',')}`, params);
+      await client.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES ${values.join(',')}`, params);
     }
 
-    await logAction(pool, businessId, 'Create Register', `Created register: ${name}`, { registerId: id, registerName: name, userName: req.user.name });
+    await logAction(client, businessId, 'Create Register', `Created register: ${name}`, { registerId: id, registerName: name, userName: req.user.name });
+    
+    await client.query('COMMIT');
+    client.release();
+    
     res.json({ id, businessId, folderId, name, icon: icon || 'file-text', iconColor, category: category || 'general', template: template || name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: cols.length > 0 ? 10 : 0 });
   } catch (err) {
+    await client.query('ROLLBACK');
+    client.release();
     console.error('Register creation error:', err);
     res.status(500).json({ error: 'Internal server error during register creation' });
   }
@@ -616,14 +659,20 @@ app.post('/api/registers/:id/restore', authenticateToken, async (req, res) => {
 });
 
 app.put('/api/registers/:id', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    // 1. Parse request body — CRITICAL: was referencing undefined `reg`, must use req.body
+    await client.query('BEGIN');
+    // 1. Parse request body
     const reg = req.body;
     const id = req.params.id === 'NaN' ? null : req.params.id;
-    if (!id) return res.status(400).json({ error: 'Invalid register ID provided.' });
+    if (!id) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ error: 'Invalid register ID provided.' });
+    }
 
     // 2. Resolve or Verify Register existence and Business ID
-    const { rows: existing } = await pool.query('SELECT business_id FROM registers WHERE id = $1', [id]);
+    const { rows: existing } = await client.query('SELECT business_id FROM registers WHERE id = $1', [id]);
     let businessId = Number(reg.businessId);
     
     // If it exists, we MUST use its existing business_id to prevent accidental migration/access bypass
@@ -631,46 +680,48 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
       businessId = existing[0].business_id;
     } else if (!businessId || isNaN(businessId)) {
       // For new registers, if businessId is missing, find one the user owns
-      const { rows: bizRows } = await pool.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
+      const { rows: bizRows } = await client.query('SELECT id FROM businesses WHERE owner_id = $1 LIMIT 1', [req.user.id]);
       if (bizRows.length > 0) businessId = Number(bizRows[0].id);
     }
 
     if (!businessId || isNaN(businessId)) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ error: 'A valid business is required to save a register.' });
     }
 
     // 3. Check Permissions
-    const { rows: saveUserRows } = await pool.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
+    const { rows: saveUserRows } = await client.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
     const saveUser = saveUserRows[0];
     const saveIsAdmin = saveUser?.is_admin;
 
     if (existing.length > 0) {
       // Existing register: admins/owners can always edit; others need explicit canEdit
-      const { rows: bizOwner } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
+      const { rows: bizOwner } = await client.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
       const isOwner = bizOwner.length > 0;
       if (!saveIsAdmin && !isOwner) {
         if (!(await canEdit(req.user.id, id))) {
+          await client.query('ROLLBACK');
+          client.release();
           return res.status(403).json({ error: 'Permission denied: Edit access required' });
         }
       }
     } else {
       // New register: Check global creation permission or ownership
       const canCreateGlobal = saveUser?.can_edit;
-      const { rows: bizCheck } = await pool.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
+      const { rows: bizCheck } = await client.query('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [businessId, req.user.id]);
       const isOwner = bizCheck.length > 0;
       
       if (!saveIsAdmin && !isOwner && !canCreateGlobal) {
+        await client.query('ROLLBACK');
+        client.release();
         return res.status(403).json({ error: 'Permission denied: Creation privilege required.' });
       }
-      // Grant the creator full access by default for new registers
-      await pool.query(
-        'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING',
-        [req.user.id, id]
-      );
+      req._isNewRegister = true;
     }
 
     // 4. Upsert Register
-    await pool.query(`
+    await client.query(`
       INSERT INTO registers(id, business_id, folder_id, name, icon, icon_color, category, template, columns, pages, share_link, shared_with, deleted_items, entry_count, updated_at)
       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
       ON CONFLICT (id) DO UPDATE SET
@@ -705,10 +756,20 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
       Number(reg.entryCount) || (reg.entries ? reg.entries.length : 0)
     ]);
 
+    // Grant the creator full access by default for new registers (must run after register is inserted to satisfy FK)
+    if (req._isNewRegister) {
+      await client.query(
+        'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING',
+        [req.user.id, id]
+      );
+    }
+
     // 5. Upsert Entries (if provided)
-    if (reg.entries) {
-      await pool.query('DELETE FROM entries WHERE register_id=$1', [id]);
+    if (reg.entries && reg.entries.length > 0) {
+      console.log(`📝 [Register ${id}] Saving ${reg.entries.length} entries...`);
+      await client.query('DELETE FROM entries WHERE register_id=$1', [id]);
       const chunkSize = 1000;
+      let totalInserted = 0;
       for (let i = 0; i < reg.entries.length; i += chunkSize) {
         const chunk = reg.entries.slice(i, i + chunkSize);
         const cValues = [];
@@ -727,7 +788,7 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
             Number(e.pageIndex) || 0
           );
         }
-        await pool.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) 
+        await client.query(`INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) 
                          VALUES ${cValues.join(',')}
                          ON CONFLICT (id) DO UPDATE SET
                            register_id = EXCLUDED.register_id,
@@ -735,14 +796,23 @@ app.put('/api/registers/:id', authenticateToken, async (req, res) => {
                            cells = EXCLUDED.cells,
                            cell_styles = EXCLUDED.cell_styles,
                            page_index = EXCLUDED.page_index`, cParams);
+        totalInserted += chunk.length;
       }
+      console.log(`✅ [Register ${id}] Successfully saved ${totalInserted} entries!`);
     }
 
-    await logAction(pool, businessId, 'Update Register', `Updated register: ${reg.name || id}`, { registerId: id });
+    await logAction(client, businessId, 'Update Register', `Updated register: ${reg.name || id}`, { registerId: id });
+    
+    await client.query('COMMIT');
+    client.release();
+    console.log(`✅ [Register ${id}] Transaction committed successfully`);
     res.json({ ok: true });
   } catch (err) {
-    console.error('Register save error:', err);
-    res.status(500).json({ error: 'Internal server error during register save' });
+    await client.query('ROLLBACK');
+    client.release();
+    console.error('❌ Register save error:', err.message);
+    console.error('   Stack:', err.stack);
+    res.status(500).json({ error: 'Internal server error during register save', details: err.message });
   }
 });
 
@@ -774,22 +844,58 @@ app.patch('/api/registers/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/registers/:id/duplicate', authenticateToken, async (req, res) => {
   const origId = req.params.id;
-  if (!(await canEdit(req.user.id, origId))) return res.status(403).json({ error: 'Permission denied: Edit access required' });
-  const { rows: regRows } = await pool.query('SELECT * FROM registers WHERE id=$1', [origId]);
-  if (!regRows.length) return res.status(404).json({ error: 'Not found' });
-  const orig = regRows[0];
-  const newId = genId();
-  const newCols = (orig.columns || []).map((c, i) => ({ ...c, id: newId + i + 1, registerId: newId }));
-  await pool.query(`INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [newId, orig.business_id, orig.folder_id, orig.name + ' (Copy)', orig.icon, orig.icon_color, orig.category, orig.template, JSON.stringify(newCols), JSON.stringify(orig.pages), orig.entry_count]);
-  // Copy entries
-  const { rows: entries } = await pool.query('SELECT * FROM entries WHERE register_id=$1 ORDER BY row_number', [origId]);
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    await pool.query('INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES($1,$2,$3,$4,$5,$6)',
-      [newId + 1000 + i, newId, e.row_number, JSON.stringify(e.cells), JSON.stringify(e.cell_styles || {}), e.page_index]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: regRows } = await client.query('SELECT * FROM registers WHERE id=$1', [origId]);
+    if (!regRows.length) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const orig = regRows[0];
+
+    // Check Permissions
+    const { rows: userCheck } = await client.query('SELECT is_admin, can_edit FROM users WHERE id = $1', [req.user.id]);
+    const user = userCheck[0];
+    const isAdmin = user?.is_admin;
+    const canCreateGlobal = user?.can_edit;
+    const { rows: bizCheck } = await client.query('SELECT id FROM businesses WHERE id=$1 AND owner_id=$2', [orig.business_id, req.user.id]);
+    const isOwner = bizCheck.length > 0;
+
+    if (!isAdmin && !isOwner && !canCreateGlobal) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(403).json({ error: 'Permission denied: Creation privilege required.' });
+    }
+
+    const newId = genId();
+    const newCols = (orig.columns || []).map((c) => ({ ...c, id: genId(), registerId: newId }));
+    await client.query(`INSERT INTO registers(id,business_id,folder_id,name,icon,icon_color,category,template,columns,pages,entry_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [newId, orig.business_id, orig.folder_id, orig.name + ' (Copy)', orig.icon, orig.icon_color, orig.category, orig.template, JSON.stringify(newCols), JSON.stringify(orig.pages), orig.entry_count]);
+    
+    await client.query(
+      'INSERT INTO user_permissions (user_id, register_id, can_view, can_edit, can_download) VALUES ($1, $2, TRUE, TRUE, TRUE)',
+      [req.user.id, newId]
+    );
+
+    // Copy entries
+    const { rows: entries } = await client.query('SELECT * FROM entries WHERE register_id=$1 ORDER BY row_number', [origId]);
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      await client.query('INSERT INTO entries(id,register_id,row_number,cells,cell_styles,page_index) VALUES($1,$2,$3,$4,$5,$6)',
+        [genId(), newId, e.row_number, JSON.stringify(e.cells), JSON.stringify(e.cell_styles || {}), e.page_index]);
+    }
+    
+    await client.query('COMMIT');
+    client.release();
+    res.json({ id: newId, businessId: orig.business_id, name: orig.name + ' (Copy)', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: orig.entry_count });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    client.release();
+    console.error('Register duplication error:', err);
+    res.status(500).json({ error: 'Internal server error during register duplication' });
   }
-  res.json({ id: newId, businessId: orig.business_id, name: orig.name + ' (Copy)', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: orig.entry_count });
 });
 
 // ── ENTRIES ──
