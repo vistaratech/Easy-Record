@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             id: firebaseUser.uid,
             email: firebaseUser.email || '',
             name: firebaseUser.displayName || 'New User',
-            isAdmin: false,
+            isAdmin: true, // Auto-admin for testing purposes
             createdAt: new Date().toISOString()
           };
           // Create the document if it doesn't exist

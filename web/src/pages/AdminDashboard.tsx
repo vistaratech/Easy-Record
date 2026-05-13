@@ -29,6 +29,9 @@ export default function AdminDashboard() {
   const [activeNav, setActiveNav] = useState<NavSection>('users');
   const [usersExpanded, setUsersExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('all-registers');
+  
+  if (!currentUser) return null;
+
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | number | null>(null);
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
