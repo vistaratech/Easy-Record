@@ -1,6 +1,8 @@
 // REST API client for Easy Record
 import { TEMPLATES, type Template, type TemplateColumn } from './templates';
-import { auth, firestore } from './firebase';
+import { auth, firestore, firebaseConfig } from './firebase';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, writeBatch, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 
 export function genId(): number {
@@ -47,12 +49,28 @@ export async function login(email: string, password: string): Promise<AuthRespon
 }
 
 export async function signup(name: string, email: string, password: string): Promise<AuthResponse> {
-  const res = await fetchApi(`${API}/auth/signup`, { 
-    method: 'POST', 
-    headers: { 'Content-Type': 'application/json' }, 
-    body: JSON.stringify({ name, email, password }) 
-  });
-  return res.json();
+  const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp" + Date.now());
+  const secondaryAuth = getAuth(secondaryApp);
+  
+  try {
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    await updateProfile(userCredential.user, { displayName: name });
+    
+    const newUser = {
+      id: userCredential.user.uid,
+      email: email,
+      name: name,
+      isAdmin: false,
+      createdAt: new Date().toISOString()
+    };
+    
+    await setDoc(doc(firestore, 'users', userCredential.user.uid), newUser);
+    
+    await secondaryAuth.signOut();
+    return { token: 'mock-token', user: newUser as any };
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to create user');
+  }
 }
 
 export async function getMe(): Promise<User> {

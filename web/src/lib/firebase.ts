@@ -4,7 +4,7 @@ import { getDatabase } from "firebase/database";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyCqmvdBNOUDObtPrrQZub9g5XDNp5v9nFo",
   authDomain: "easyrecords-a016d.firebaseapp.com",
   databaseURL: "https://easyrecords-a016d-default-rtdb.firebaseio.com",
