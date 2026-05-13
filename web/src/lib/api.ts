@@ -1,5 +1,11 @@
 // REST API client for Easy Record
 import { TEMPLATES, type Template, type TemplateColumn } from './templates';
+import { auth, firestore } from './firebase';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, writeBatch, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+
+export function genId(): number {
+  return Date.now() + Math.floor(Math.random() * 1000);
+}
 
 const API = import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
 
@@ -17,7 +23,7 @@ async function fetchApi(input: string, init?: RequestInit) {
 }
 // ==================== AUTH ====================
 export interface User {
-  id: number;
+  id: string | number;
   email: string;
   name: string | null;
   phone?: string;
@@ -55,16 +61,23 @@ export async function getMe(): Promise<User> {
 }
 
 // ==================== BUSINESSES ====================
-export interface Business { id: number; name: string; ownerId: number; createdAt: string; }
+export interface Business { id: number; name: string; ownerId: string | number; createdAt: string; }
 
 export async function listBusinesses(): Promise<Business[]> {
-  const res = await fetchApi(`${API}/businesses`);
-  return res.json();
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Not authenticated');
+  const q = query(collection(firestore, 'businesses'), where('ownerId', '==', uid));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: Number(d.id) } as Business));
 }
 
 export async function createBusiness(name: string): Promise<Business> {
-  const res = await fetchApi(`${API}/businesses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-  return res.json();
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Not authenticated');
+  const id = genId();
+  const newBus: Business = { id, name, ownerId: uid, createdAt: new Date().toISOString() };
+  await setDoc(doc(firestore, 'businesses', id.toString()), newBus);
+  return newBus;
 }
 
 // ==================== FOLDERS ====================
@@ -76,23 +89,30 @@ export interface Folder {
 }
 
 export async function listFolders(businessId?: number): Promise<Folder[]> {
-  const url = businessId ? `${API}/folders?businessId=${businessId}` : `${API}/folders`;
-  const res = await fetchApi(url);
-  return res.json();
+  let q = collection(firestore, 'folders') as any;
+  if (businessId) {
+    q = query(q, where('businessId', '==', businessId));
+  }
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: Number(d.id) } as Folder));
 }
 
 export async function createFolder(businessId: number, name: string): Promise<Folder> {
-  const res = await fetchApi(`${API}/folders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, name }) });
-  return res.json();
+  const id = genId();
+  const newFolder: Folder = { id, businessId, name, createdAt: new Date().toISOString() };
+  await setDoc(doc(firestore, 'folders', id.toString()), newFolder);
+  return newFolder;
 }
 
 export async function deleteFolder(folderId: number): Promise<void> {
-  await fetchApi(`${API}/folders/${folderId}`, { method: 'DELETE' });
+  await deleteDoc(doc(firestore, 'folders', folderId.toString()));
 }
 
 export async function renameFolder(folderId: number, newName: string): Promise<Folder> {
-  const res = await fetchApi(`${API}/folders/${folderId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }) });
-  return res.json();
+  const folderRef = doc(firestore, 'folders', folderId.toString());
+  await updateDoc(folderRef, { name: newName });
+  const snap = await getDoc(folderRef);
+  return { ...snap.data(), id: Number(snap.id) } as Folder;
 }
 
 
@@ -220,7 +240,7 @@ export async function searchAllRegisters(businessId: number, searchTerm: string)
 // ── REST helpers ──────────────────────────────────────────────────────────────
 
 // In-memory cache so reads don't hit server on every mutation
-const registerCache = new Map<number, RegisterDetail>();
+const registerCache = new Map<string, RegisterDetail>();
 // Mutation queue: ensures operations on the same register run serially to prevent race conditions
 const registerMutationQueues = new Map<string | number, Promise<any>>();
 // Tracks how many mutations are currently pending/running globally
@@ -279,22 +299,37 @@ function populateAutoIncrement(reg: RegisterDetail, columnId: number) {
   });
 }
 
-async function getRegDoc(registerId: number): Promise<RegisterDetail> {
-  // Return a shallow-safe clone from cache — avoids a server round-trip on every mutation
-  if (registerCache.has(registerId)) {
-    return structuredClone(registerCache.get(registerId)!);
+const ENTRIES_PER_CHUNK = 1000;
+
+async function getRegDoc(registerId: number | string): Promise<RegisterDetail> {
+  const regIdStr = registerId.toString();
+  if (registerCache.has(regIdStr)) {
+    return structuredClone(registerCache.get(regIdStr)!);
   }
-  const res = await fetchApi(`${API}/registers/${registerId}`);
-  if (!res.ok) {
-    if (res.status === 403) {
-      const err = new Error('ACCESS_DENIED');
-      (err as any).status = 403;
-      throw err;
-    }
+  
+  const regRef = doc(firestore, 'registers', regIdStr);
+  const snap = await getDoc(regRef);
+  if (!snap.exists()) {
     throw new Error('Register not found');
   }
-  const data: RegisterDetail = await res.json();
   
+  const data = snap.data() as RegisterDetail;
+  const numChunks = (data as any).numChunks || 0;
+  
+  if (numChunks > 0) {
+    const chunkPromises = [];
+    for (let i = 0; i < numChunks; i++) {
+      chunkPromises.push(getDoc(doc(firestore, 'registers', regIdStr, 'entries_chunks', i.toString())));
+    }
+    const chunks = await Promise.all(chunkPromises);
+    data.entries = [];
+    for (const chunkSnap of chunks) {
+      if (chunkSnap.exists()) {
+        data.entries.push(...(chunkSnap.data().chunk || []));
+      }
+    }
+  }
+
   // Ensure basic arrays exist so mutations don't crash
   if (!data.columns) data.columns = [];
   if (!data.pages) data.pages = [];
@@ -304,32 +339,43 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
   // Ensure every entry has a cells object
   data.entries.forEach(e => { if (!e.cells) e.cells = {}; });
 
-  // Store the raw data in cache; return a clone so mutations stay isolated
-  registerCache.set(registerId, data);
+  registerCache.set(regIdStr, data);
   return structuredClone(data);
 }
 
 /**
- * Immediately persist a register to the REST backend.
- * The backend handles all storage concerns (chunking is no longer needed).
+ * Immediately persist a register to Firestore.
+ * Handles chunking entries to avoid the 1MB document size limit.
  */
 async function saveRegDocImmediate(reg: RegisterDetail): Promise<void> {
-  // Update cache immediately so subsequent mutations see this state
-  registerCache.set(reg.id, reg);
+  const regIdStr = reg.id.toString();
+  registerCache.set(regIdStr, reg);
 
-  const res = await fetchApi(`${API}/registers/${reg.id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(reg),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Failed to save register: ${err}`);
+  const { entries, ...regData } = reg;
+  const numChunks = Math.ceil((entries?.length || 0) / ENTRIES_PER_CHUNK);
+  (regData as any).numChunks = numChunks;
+
+  const batch = writeBatch(firestore);
+  const regRef = doc(firestore, 'registers', regIdStr);
+  batch.set(regRef, regData);
+
+  for (let i = 0; i < numChunks; i++) {
+    const chunk = entries.slice(i * ENTRIES_PER_CHUNK, (i + 1) * ENTRIES_PER_CHUNK);
+    batch.set(doc(firestore, 'registers', regIdStr, 'entries_chunks', i.toString()), { chunk });
   }
+
+  const oldRegSnap = await getDoc(regRef);
+  if (oldRegSnap.exists()) {
+    const oldNumChunks = (oldRegSnap.data() as any).numChunks || 0;
+    for (let i = numChunks; i < oldNumChunks; i++) {
+      batch.delete(doc(firestore, 'registers', regIdStr, 'entries_chunks', i.toString()));
+    }
+  }
+
+  await batch.commit();
 }
 
-async function flushPendingWrite(registerId: number): Promise<void> {
-  // Now redundant with serial queueing, but kept for interface compatibility
+async function flushPendingWrite(registerId: number | string): Promise<void> {
   const queue = registerMutationQueues.get(registerId);
   if (queue) await queue;
 }
@@ -342,29 +388,34 @@ export async function flushAllPendingWrites(): Promise<void> {
 }
 
 // Export so the query can bust the cache when needed (e.g., switching between registers)
-export function bustRegisterCache(registerId: number): void {
-  // Flush any pending write first so it's not lost
+export function bustRegisterCache(registerId: number | string): void {
   flushPendingWrite(registerId);
-  registerCache.delete(registerId);
+  registerCache.delete(registerId.toString());
 }
 
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export async function listRegisters(businessId?: number): Promise<RegisterSummary[]> {
-  const url = businessId ? `${API}/registers?businessId=${businessId}` : `${API}/registers`;
-  const res = await fetchApi(url);
-  const all: RegisterSummary[] = await res.json();
+  let q;
+  if (businessId) {
+    q = query(collection(firestore, 'registers'), where('businessId', '==', Number(businessId)));
+  } else {
+    q = query(collection(firestore, 'registers'));
+  }
+  const snap = await getDocs(q);
+  const all = snap.docs.map(d => d.data() as RegisterSummary);
   return all.filter(r => !r.deletedAt && r.hasAccess !== false);
 }
 
 export async function listDeletedRegisters(businessId: number): Promise<RegisterSummary[]> {
-  const res = await fetchApi(`${API}/registers?businessId=${businessId}`);
-  const all: RegisterSummary[] = await res.json();
+  const q = query(collection(firestore, 'registers'), where('businessId', '==', Number(businessId)));
+  const snap = await getDocs(q);
+  const all = snap.docs.map(d => d.data() as RegisterSummary);
   return all.filter(r => !!r.deletedAt);
 }
 
-export async function getRegister(registerId: number): Promise<RegisterDetail> {
+export async function getRegister(registerId: number | string): Promise<RegisterDetail> {
   const reg = await getRegDoc(registerId);
   if (!reg.pages || reg.pages.length === 0) reg.pages = [{ id: 1, name: 'Page 1', index: 0 }];
   if (!reg.entries) reg.entries = [];
@@ -372,7 +423,7 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
 
   // MIGRATION: Fix duplicate IDs caused by precision loss in older Excel imports
   let hasDuplicates = false;
-  const seenIds = new Set<number>();
+  const seenIds = new Set<number | string>();
   reg.entries.forEach((e) => {
     if (seenIds.has(e.id)) {
       hasDuplicates = true;
@@ -431,24 +482,36 @@ export async function createRegister(data: {
   return newReg;
 }
 
-export async function deleteRegister(registerId: number): Promise<void> {
+export async function deleteRegister(registerId: number | string): Promise<void> {
   const reg = await getRegDoc(registerId);
-  await fetchApi(`${API}/registers/${registerId}`, { method: 'DELETE' });
-  registerCache.delete(registerId);
+  reg.deletedAt = new Date().toISOString();
+  await saveRegDocImmediate(reg);
+  registerCache.delete(registerId.toString());
   await logAction(reg.businessId, 'Trash Register', `Moved register to recycle bin: ${reg.name}`, { registerId, registerName: reg.name });
 }
 
-export async function permanentlyDeleteRegister(registerId: number): Promise<void> {
+export async function permanentlyDeleteRegister(registerId: number | string): Promise<void> {
   const reg = await getRegDoc(registerId);
-  await fetchApi(`${API}/registers/${registerId}/permanent`, { method: 'DELETE' });
-  registerCache.delete(registerId);
+  const regIdStr = registerId.toString();
+  const regRef = doc(firestore, 'registers', regIdStr);
+  const numChunks = (reg as any).numChunks || 0;
+  
+  const batch = writeBatch(firestore);
+  batch.delete(regRef);
+  for (let i = 0; i < numChunks; i++) {
+    batch.delete(doc(firestore, 'registers', regIdStr, 'entries_chunks', i.toString()));
+  }
+  await batch.commit();
+
+  registerCache.delete(regIdStr);
   await logAction(reg.businessId, 'Delete Register', `Permanently deleted register: ${reg.name}`, { registerId, registerName: reg.name });
 }
 
-export async function restoreRegister(registerId: number): Promise<void> {
+export async function restoreRegister(registerId: number | string): Promise<void> {
   const reg = await getRegDoc(registerId);
-  await fetchApi(`${API}/registers/${registerId}/restore`, { method: 'POST' });
-  registerCache.delete(registerId);
+  delete reg.deletedAt;
+  await saveRegDocImmediate(reg);
+  registerCache.delete(registerId.toString());
   await logAction(reg.businessId, 'Restore Register', `Restored register: ${reg.name}`, { registerId, registerName: reg.name });
 }
 
@@ -2048,7 +2111,7 @@ export interface AdminStats {
 }
 
 export interface UserPermission {
-  registerId: number;
+  registerId: number | string;
   registerName: string;
   businessName?: string;
   canView: boolean;
@@ -2057,52 +2120,90 @@ export interface UserPermission {
 }
 
 export async function getAdminStats(): Promise<AdminStats> {
-  const res = await fetchApi(`${API}/admin/stats`);
-  return res.json();
+  const usersSnap = await getDocs(collection(firestore, 'users'));
+  return { userCount: usersSnap.size };
 }
 
 export async function listAllUsers(): Promise<User[]> {
-  const res = await fetchApi(`${API}/admin/users`);
-  return res.json();
+  const usersSnap = await getDocs(collection(firestore, 'users'));
+  return usersSnap.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  } as User));
 }
 
-export async function updateUserGlobalPermissions(userId: number, canCreateRegisters: boolean, canCreateTemplates: boolean) {
-  return fetchApi(`${API}/admin/users/${userId}/global-permissions`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ canCreateRegisters, canCreateTemplates })
+export async function updateUserGlobalPermissions(userId: number | string, canCreateRegisters: boolean, canCreateTemplates: boolean) {
+  const userRef = doc(firestore, 'users', String(userId));
+  await updateDoc(userRef, { canCreateRegisters, canCreateTemplates });
+}
+
+export async function getUserPermissions(userId: number | string): Promise<UserPermission[]> {
+  const userRef = doc(firestore, 'users', String(userId));
+  const userSnap = await getDoc(userRef);
+  const userData = userSnap.data() as any;
+  const permissionsMap = userData?.registerPermissions || {};
+  
+  const registers = await listRegisters();
+  return registers.map(r => {
+    const perm = permissionsMap[r.id] || { canView: false, canEdit: false, canDownload: false };
+    return {
+      registerId: r.id,
+      registerName: r.name,
+      businessName: 'Default',
+      canView: perm.canView,
+      canEdit: perm.canEdit,
+      canDownload: perm.canDownload
+    };
   });
-}
-
-export async function getUserPermissions(userId: number): Promise<UserPermission[]> {
-  const res = await fetchApi(`${API}/admin/users/${userId}/permissions`);
-  return res.json();
 }
 
 export async function updateUserPermissions(
-  userId: number, 
+  userId: number | string, 
   permissions: Partial<UserPermission>[], 
   globalPermissions?: { isAdmin?: boolean, canEdit?: boolean, canCreateRegisters?: boolean, canCreateTemplates?: boolean }
 ): Promise<void> {
-  await fetchApi(`${API}/admin/permissions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, permissions, globalPermissions }),
+  const userRef = doc(firestore, 'users', String(userId));
+  const userSnap = await getDoc(userRef);
+  const userData = userSnap.data() as any;
+  const permissionsMap = userData?.registerPermissions || {};
+  
+  permissions.forEach(p => {
+    if (p.registerId) {
+      permissionsMap[p.registerId] = {
+        canView: p.canView ?? permissionsMap[p.registerId]?.canView ?? false,
+        canEdit: p.canEdit ?? permissionsMap[p.registerId]?.canEdit ?? false,
+        canDownload: p.canDownload ?? permissionsMap[p.registerId]?.canDownload ?? false,
+      };
+    }
   });
+
+  const updateData: any = { registerPermissions: permissionsMap };
+  if (globalPermissions) {
+    if (globalPermissions.isAdmin !== undefined) updateData.isAdmin = globalPermissions.isAdmin;
+    if (globalPermissions.canEdit !== undefined) updateData.canEdit = globalPermissions.canEdit;
+    if (globalPermissions.canCreateRegisters !== undefined) updateData.canCreateRegisters = globalPermissions.canCreateRegisters;
+    if (globalPermissions.canCreateTemplates !== undefined) updateData.canCreateTemplates = globalPermissions.canCreateTemplates;
+  }
+  
+  await updateDoc(userRef, updateData);
 }
 
-export async function deleteUser(userId: number): Promise<void> {
-  await fetchApi(`${API}/admin/users/${userId}`, { method: 'DELETE' });
+export async function deleteUser(userId: number | string): Promise<void> {
+  const userRef = doc(firestore, 'users', String(userId));
+  await deleteDoc(userRef);
 }
 
-export async function resetUserPassword(userId: number): Promise<void> {
-  await fetchApi(`${API}/admin/users/${userId}/reset-password`, { method: 'POST' });
+export async function resetUserPassword(userId: number | string): Promise<void> {
+  const userRef = doc(firestore, 'users', String(userId));
+  const userSnap = await getDoc(userRef);
+  const userData = userSnap.data() as User;
+  if (userData?.email) {
+    const { sendPasswordResetEmail } = await import('firebase/auth');
+    await sendPasswordResetEmail(auth, userData.email);
+  }
 }
 
-export async function toggleUserStatus(userId: number, isDisabled: boolean): Promise<void> {
-  await fetchApi(`${API}/admin/users/${userId}/status`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ isDisabled }),
-  });
+export async function toggleUserStatus(userId: number | string, isDisabled: boolean): Promise<void> {
+  const userRef = doc(firestore, 'users', String(userId));
+  await updateDoc(userRef, { disabled: isDisabled });
 }

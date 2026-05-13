@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getMe, clearAllCaches, type User } from './api';
+import { clearAllCaches, type User } from './api';
+import { auth, firestore } from './firebase';
+import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const TOKEN_KEY = 'recordbook_token';
 
@@ -10,13 +13,12 @@ interface AuthContextType {
   isLoading: boolean;
   authLoading: boolean; // Alias for isLoading as requested
   login: (token: string, user: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Restore token from localStorage so sessions survive page refreshes
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem(TOKEN_KEY);
@@ -27,40 +29,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    async function loadUser() {
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-      try {
-        const userData = await getMe();
-        setUser(userData);
-      } catch (err) {
-        console.error('Session validation failed:', err);
-        localStorage.removeItem(TOKEN_KEY);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const idToken = await firebaseUser.getIdToken();
+        setToken(idToken);
+        localStorage.setItem(TOKEN_KEY, idToken);
+
+        // Fetch custom user doc from Firestore
+        const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        let customUser: User;
+        if (userDocSnap.exists()) {
+          customUser = { id: firebaseUser.uid, ...userDocSnap.data() } as User;
+        } else {
+          customUser = {
+            id: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: firebaseUser.displayName || 'New User',
+            isAdmin: false,
+            createdAt: new Date().toISOString()
+          };
+          // Create the document if it doesn't exist
+          await setDoc(userDocRef, customUser);
+        }
+        setUser(customUser);
+      } else {
         setToken(null);
         setUser(null);
-      } finally {
-        setIsLoading(false);
+        localStorage.removeItem(TOKEN_KEY);
       }
-    }
-    loadUser();
-  }, [token]);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const login = useCallback((newToken: string, newUser: User) => {
-    // Clear all caches from the previous session before setting the new user
     queryClient.clear();
     clearAllCaches();
-    localStorage.setItem(TOKEN_KEY, newToken);
     setToken(newToken);
     setUser(newUser);
   }, [queryClient]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await firebaseSignOut(auth);
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
-    // Clear all cached data so the next user starts fresh
     queryClient.clear();
     clearAllCaches();
   }, [queryClient]);

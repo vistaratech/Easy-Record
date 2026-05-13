@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useAuth } from '../lib/auth';
-import { login as loginApi, signup as signupApi } from '../lib/api';
+
 import { ArrowRight, UserPlus, LogIn } from 'lucide-react';
+import { auth } from '../lib/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  // We don't need the login function from useAuth anymore since onAuthStateChanged handles it
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -19,12 +20,35 @@ export default function LoginPage() {
     
     setLoading(true); setError('');
     try {
-      const result = isLogin 
-        ? await loginApi(email, password)
-        : await signupApi(name, email, password);
-      login(result.token, result.user);
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        const userCred = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCred.user, { displayName: name });
+      }
+      // The onAuthStateChanged listener in AuthProvider will detect this and redirect
     } catch (err: any) {
-      setError(err.message || 'An error occurred during authentication');
+      console.error(err);
+      if (err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password.');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError('Email is already registered.');
+      } else {
+        setError(err.message || 'An error occurred during authentication');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true); setError('');
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Google Sign-In failed');
     } finally {
       setLoading(false);
     }
@@ -49,6 +73,27 @@ export default function LoginPage() {
         </p>
 
         {error && <div className="login-error">{error}</div>}
+
+        <button 
+          type="button" 
+          onClick={handleGoogleLogin} 
+          disabled={loading}
+          style={{
+            width: '100%', padding: '0.75rem', marginBottom: '1rem', 
+            background: 'white', color: '#333', border: '1px solid #ddd', 
+            borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+          }}
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" style={{ width: 18, height: 18 }} />
+          Continue with Google
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', margin: '1rem 0', color: '#666' }}>
+          <div style={{ flex: 1, height: '1px', background: '#ddd' }} />
+          <span style={{ padding: '0 0.5rem', fontSize: '0.85rem' }}>OR</span>
+          <div style={{ flex: 1, height: '1px', background: '#ddd' }} />
+        </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
           {!isLogin && (

@@ -30,21 +30,21 @@ export default function AdminDashboard() {
   const [usersExpanded, setUsersExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('all-registers');
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | number | null>(null);
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
   const [loading, setLoading] = useState(true);
   const [permLoading, setPermLoading] = useState(false);
   const [registerSearch, setRegisterSearch] = useState('');
   const [saving, setSaving] = useState(false);
-  const [selectedRegIds, setSelectedRegIds] = useState<Set<number>>(new Set());
-  const [expandedRegId, setExpandedRegId] = useState<number | null>(null);
+  const [selectedRegIds, setSelectedRegIds] = useState<Set<string | number>>(new Set());
+  const [expandedRegId, setExpandedRegId] = useState<string | number | null>(null);
   const [regColumns, setRegColumns] = useState<Column[]>([]);
   const [columnsLoading, setColumnsLoading] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>(CATEGORIES[0].id);
   const [creating, setCreating] = useState(false);
-  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
-  const [userMenuOpenId, setUserMenuOpenId] = useState<number | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | number | null>(null);
+  const [userMenuOpenId, setUserMenuOpenId] = useState<string | number | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' });
@@ -74,7 +74,7 @@ export default function AdminDashboard() {
     try {
       const perms = await getUserPermissions(user.id);
       setPermissions(perms);
-      const approved = new Set<number>();
+      const approved = new Set<string | number>();
       perms.forEach(p => { if (p.canView) approved.add(p.registerId); });
       setSelectedRegIds(approved);
     } catch (err: any) {
@@ -93,17 +93,17 @@ export default function AdminDashboard() {
     return list.filter(p => p.registerName.toLowerCase().includes(q) || p.businessName?.toLowerCase().includes(q));
   }, [permissions, registerSearch, activeTab, selectedRegIds]);
 
-  const toggleRegSelection = (regId: number) => {
+  const toggleRegSelection = (regId: string | number) => {
     const next = new Set(selectedRegIds);
     if (next.has(regId)) next.delete(regId); else next.add(regId);
     setSelectedRegIds(next);
   };
 
-  const togglePermission = (regId: number, field: 'canEdit' | 'canDownload') => {
+  const togglePermission = (regId: string | number, field: 'canEdit' | 'canDownload') => {
     setPermissions(prev => prev.map(p => p.registerId === regId ? { ...p, [field]: !p[field] } : p));
   };
 
-  const handleExpandRegister = async (regId: number) => {
+  const handleExpandRegister = async (regId: string | number) => {
     setExpandedRegId(regId);
     setColumnsLoading(true);
     try {
@@ -176,7 +176,7 @@ export default function AdminDashboard() {
     }
   }
 
-  async function handleDeleteRegister(regId: number, e: React.MouseEvent) {
+  async function handleDeleteRegister(regId: string | number, e: React.MouseEvent) {
     e.stopPropagation();
     setMenuOpenId(null);
     if (!window.confirm('Are you sure you want to permanently delete this register? This action cannot be undone and will remove it for all users.')) return;
@@ -248,7 +248,7 @@ export default function AdminDashboard() {
     }
   }
 
-  async function handleUserAction(userId: number, action: string) {
+  async function handleUserAction(userId: string | number, action: string) {
     setUserMenuOpenId(null);
     const user = users.find(u => u.id === userId);
     if (!user) return;

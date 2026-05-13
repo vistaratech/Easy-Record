@@ -26,3 +26,6 @@ npm-debug.log*
 *.sln
 *.sw?
 *.local
+
+.vercel
+.env*.local
